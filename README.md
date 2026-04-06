@@ -1,1 +1,3 @@
-[![Review Assignment Due Date](https://classroom.github.com/assets/deadline-readme-button-22041afd0340ce965d47ae6ef1cefeee28c7c493a6346c4f15d667ab976d596c.svg)](https://classroom.github.com/a/pJbKpfLT)
+# ECE 4377 Final Project
+
+Graphics engine written in VHDL. Displays an image on VGA monitor via the DE2-115's VGA output.
