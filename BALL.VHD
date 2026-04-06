@@ -28,7 +28,7 @@ SIGNAL Ball_Y_pos, Ball_X_pos		: std_logic_vector(9 DOWNTO 0);
 
 BEGIN           
 
-Size <= CONV_STD_LOGIC_VECTOR(8,11);
+Size <= CONV_STD_LOGIC_VECTOR(8,10);
 
 		-- Colors for pixel data on video signal
 Red <=   (others => '0') when Ball_on = '1' else (others => '1');
