@@ -115,14 +115,13 @@ ARCHITECTURE structural OF DE2_115_TOP IS
             pixel_row, pixel_column : OUT STD_LOGIC_VECTOR(9 DOWNTO 0));
 
     END COMPONENT;
-
-    COMPONENT LINE_TEST
-
-        PORT (
-            pixel_row, pixel_column : IN STD_LOGIC_VECTOR(9 DOWNTO 0);
-            Red, Green, Blue : OUT STD_LOGIC_VECTOR(7 DOWNTO 0);
-            Vert_sync : IN STD_LOGIC);
-    END COMPONENT;
+	 
+	 COMPONENT ball
+    PORT (
+        pixel_row, pixel_column : IN STD_LOGIC_VECTOR(9 DOWNTO 0);
+        Red, Green, Blue : OUT STD_LOGIC_VECTOR(7 DOWNTO 0);
+        Vert_sync : IN STD_LOGIC);
+END COMPONENT;
 
     SIGNAL red_int : STD_LOGIC_VECTOR(7 DOWNTO 0);
     SIGNAL green_int : STD_LOGIC_VECTOR(7 DOWNTO 0);
@@ -161,13 +160,13 @@ BEGIN
         pixel_column => pixel_column_int
     );
 
-    U2 : LINE_TEST PORT MAP
-    (
-        pixel_row => pixel_row_int,
-        pixel_column => pixel_column_int,
-        Red => red_int,
-        Green => green_int,
-        Blue => blue_int,
-        Vert_sync => vert_sync_int
-    );
+    U2 : ball PORT MAP
+(
+    pixel_row => pixel_row_int,
+    pixel_column => pixel_column_int,
+    Red => red_int,
+    Green => green_int,
+    Blue => blue_int,
+    Vert_sync => vert_sync_int
+);
 END structural;
