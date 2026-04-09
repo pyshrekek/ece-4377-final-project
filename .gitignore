@@ -10,6 +10,12 @@
 # *.v
 # *.sdc
 
+# ignore custom simulator files
+vga-sim
+makefile
+
+.vscode
+
 # ignore Quartus II generated folders
 *_sim
 db
