@@ -115,7 +115,7 @@ ARCHITECTURE structural OF DE2_115_TOP IS
             pixel_row, pixel_column : OUT STD_LOGIC_VECTOR(9 DOWNTO 0));
     END COMPONENT;
 	 
-	 COMPONENT CUBE_TEST
+	 COMPONENT GRAPHICS_LAYER
     PORT (
         pixel_row, pixel_column : IN STD_LOGIC_VECTOR(9 DOWNTO 0);
         Red, Green, Blue : OUT STD_LOGIC_VECTOR(7 DOWNTO 0);
@@ -160,7 +160,7 @@ BEGIN
         pixel_column   => pixel_column_int
     );
 
-    U2 : CUBE_TEST PORT MAP
+    U2 : GRAPHICS_LAYER PORT MAP
 (
     pixel_row => pixel_row_int,
     pixel_column => pixel_column_int,
