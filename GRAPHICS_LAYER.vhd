@@ -1,79 +1,70 @@
-LIBRARY IEEE;
-USE IEEE.STD_LOGIC_1164.ALL;
-USE IEEE.NUMERIC_STD.ALL;
-USE work.GRAPHICS_TEST_UTILS.ALL;
-USE work.RENDERING_PIPELINE.ALL;
+-- ============================================================
+-- GRAPHICS_LAYER.vhd
+-- ECE 4377 Final Project
+--
+-- Top-level pixel renderer. Reads the scene (cubes + light)
+-- entirely from DEFINE_OBJECTS — nothing is hardcoded here.
+--
+-- To change the scene, edit DEFINE_OBJECTS.vhd only.
+-- ============================================================
 
-ENTITY GRAPHICS_LAYER IS
-    PORT (
-        pixel_row : IN STD_LOGIC_VECTOR(9 DOWNTO 0);
-        pixel_column : IN STD_LOGIC_VECTOR(9 DOWNTO 0);
-        vert_sync : IN STD_LOGIC;
-        Red : OUT STD_LOGIC_VECTOR(7 DOWNTO 0);
-        Green : OUT STD_LOGIC_VECTOR(7 DOWNTO 0);
-        Blue : OUT STD_LOGIC_VECTOR(7 DOWNTO 0)
-    );
-END ENTITY GRAPHICS_LAYER;
+library ieee;
+  use ieee.std_logic_1164.all;
+  use ieee.numeric_std.all;
+  use work.graphics_test_utils.all;
+  use work.rendering_pipeline.all;
+  use work.define_objects.all;
 
-ARCHITECTURE behavioral OF GRAPHICS_LAYER IS
+entity graphics_layer is
+  port (
+    pixel_row    : in    std_logic_vector(9 downto 0);
+    pixel_column : in    std_logic_vector(9 downto 0);
+    vert_sync    : in    std_logic;
+    red          : out   std_logic_vector(7 downto 0);
+    green        : out   std_logic_vector(7 downto 0);
+    blue         : out   std_logic_vector(7 downto 0)
+  );
+end entity graphics_layer;
 
-    SIGNAL x : INTEGER RANGE 0 TO 639;
-    SIGNAL y : INTEGER RANGE 0 TO 639;
+architecture behavioral of graphics_layer is
 
-    -- Scene definition lives here; rendering implementation is in RENDERING_PIPELINE.
-    CONSTANT SCENE_LIGHT : light_t := (
-        x_q8 => 160,
-        y_q8 => 110,
-        z_q8 => 220,
-        ambient_q8 => 48,
-        diffuse_q8 => 192
-    );
+  signal x           : integer range 0 to 639;
+  signal y           : integer range 0 to 479;
+  signal pixel_color : color_t;
 
-    CONSTANT CUBE_1 : cube_t := (
-        center_x => 280,
-        center_y => 240,
-        side_length => 160,
-        color => (r => x"FF", g => x"FF", b => x"FF")
-    );
+begin
 
-    CONSTANT CUBE_2 : cube_t := (
-        center_x => 460,
-        center_y => 240,
-        side_length => 120,
-        color => (r => x"00", g => x"FF", b => x"FF")
-    );
+  x <= to_integer(unsigned(pixel_column));
+  y <= to_integer(unsigned(pixel_row));
 
-    CONSTANT CUBE_3 : cube_t := (
-        center_x => 500,
-        center_y => 240,
-        side_length => 100,
-        color => (r => x"FF", g => x"00", b => x"00")
-    );
+  -- Render all cubes in SCENE with flat shading from SCENE_LIGHT.
+  -- Front-to-back priority: index 0 is drawn on top.
+  -- Walk back-to-front (highest index first) so index 0 overwrites last.
+  render_proc : process (x, y) is
 
-    CONSTANT BACKGROUND_COLOR : color_t := (r => x"00", g => x"00", b => x"00");
+    variable color : color_t;
+    variable hit   : color_t;
 
-    SIGNAL pixel_color : color_t := TRANSPARENT;
+  begin
 
-BEGIN
+    color := BACKGROUND_COLOR;
 
-    x <= to_integer(unsigned(pixel_column));
-    y <= to_integer(unsigned(pixel_row));
-    
-    PROCESS (x, y)
-    BEGIN
-        pixel_color <= render_scene_pixel(
-            x,
-            y,
-            CUBE_1,
-            CUBE_2,
-            CUBE_3,
-            SCENE_LIGHT,
-            BACKGROUND_COLOR
-        );
-    END PROCESS;
+    for i in NUM_CUBES - 1 downto 0 loop
 
-    Red <= pixel_color.r;
-    Green <= pixel_color.g;
-    Blue <= pixel_color.b;
+      hit := render_lit_cube_pixel(x, y, SCENE(i), SCENE_LIGHT);
 
-END ARCHITECTURE behavioral;
+      if ((hit.r /= x"00") or (hit.g /= x"00") or (hit.b /= x"00")) then
+        color := hit;
+      end if;
+
+    end loop;
+
+    pixel_color <= color;
+
+  end process render_proc;
+
+  red   <= pixel_color.r;
+  green <= pixel_color.g;
+  blue  <= pixel_color.b;
+
+end architecture behavioral;
