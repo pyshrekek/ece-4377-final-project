@@ -90,6 +90,8 @@ begin
           center_x    => 320 + (SCENE(i).center_x - 320) * scale_num / scale_den + x_offset,
           center_y    => 240 + (SCENE(i).center_y - 240) * scale_num / scale_den + y_offset,
           side_length => SCENE(i).side_length * scale_num / scale_den,
+          scale_x_q8  => SCENE(i).scale_x_q8,
+          scale_y_q8  => SCENE(i).scale_y_q8,
           color       => SCENE(i).color
         );
 
@@ -109,6 +111,8 @@ begin
           center_x => 320 + (SCENE_SPHERES(i).center_x - 320) * scale_num / scale_den + x_offset,
           center_y => 240 + (SCENE_SPHERES(i).center_y - 240) * scale_num / scale_den + y_offset,
           radius   => SCENE_SPHERES(i).radius * scale_num / scale_den,
+          scale_x_q8 => SCENE_SPHERES(i).scale_x_q8,
+          scale_y_q8 => SCENE_SPHERES(i).scale_y_q8,
           color    => SCENE_SPHERES(i).color
         );
 
