@@ -18,6 +18,8 @@ package sphere_rendering is
     center_x : integer;
     center_y : integer;
     radius   : integer;
+    scale_x_q8 : integer; -- 256 = 1.0x
+    scale_y_q8 : integer; -- 256 = 1.0x
     color    : color_t;
   end record;
 
@@ -68,6 +70,21 @@ package body sphere_rendering is
       return -v;
     end if;
     return v;
+  end function;
+
+  function clamp_scale_q8(scale_q8 : integer) return integer is
+  begin
+    if scale_q8 < 1 then
+      return 1;
+    end if;
+    return scale_q8;
+  end function;
+
+  function inv_scale_delta_q8(delta_px, scale_q8 : integer) return integer is
+    variable s : integer;
+  begin
+    s := clamp_scale_q8(scale_q8);
+    return div_round_signed(delta_px * 256, s);
   end function;
 
   function to_slv8(v : integer) return std_logic_vector is
@@ -138,6 +155,8 @@ package body sphere_rendering is
   ) return color_t is
     variable dx        : integer;
     variable dy        : integer;
+    variable dx_local  : integer;
+    variable dy_local  : integer;
     variable adx       : integer;
     variable ady       : integer;
     variable radius2   : integer;
@@ -154,23 +173,25 @@ package body sphere_rendering is
 
     dx := x - sphere.center_x;
     dy := y - sphere.center_y;
+    dx_local := inv_scale_delta_q8(dx, sphere.scale_x_q8);
+    dy_local := inv_scale_delta_q8(dy, sphere.scale_y_q8);
     radius2 := sphere.radius * sphere.radius;
-    dist2 := dx * dx + dy * dy;
+    dist2 := dx_local * dx_local + dy_local * dy_local;
 
     if dist2 > radius2 then
       return TRANSPARENT;
     end if;
 
     -- Fast hemisphere depth approximation (no sqrt/divide by variable).
-    adx := abs_int(dx);
-    ady := abs_int(dy);
+    adx := abs_int(dx_local);
+    ady := abs_int(dy_local);
     z_approx := sphere.radius - ((adx + ady) / 2);
     if z_approx < 0 then
       z_approx := 0;
     end if;
 
     -- Approximate N · L in a timing-friendly way for pixel-rate combinational logic.
-    dot_num := (dx * light.x_q8) + (dy * light.y_q8) + (z_approx * light.z_q8);
+    dot_num := (dx_local * light.x_q8) + (dy_local * light.y_q8) + (z_approx * light.z_q8);
     if dot_num < 0 then
       dot_q8 := 0;
     else
@@ -203,6 +224,8 @@ package body sphere_rendering is
   ) return color_t is
     variable dx        : integer;
     variable dy        : integer;
+    variable dx_local  : integer;
+    variable dy_local  : integer;
     variable radius2   : integer;
     variable dist2     : integer;
     variable ring_dist : integer;
@@ -215,8 +238,10 @@ package body sphere_rendering is
 
     dx := x - sphere.center_x;
     dy := y - sphere.center_y;
+    dx_local := inv_scale_delta_q8(dx, sphere.scale_x_q8);
+    dy_local := inv_scale_delta_q8(dy, sphere.scale_y_q8);
     radius2 := sphere.radius * sphere.radius;
-    dist2 := dx * dx + dy * dy;
+    dist2 := dx_local * dx_local + dy_local * dy_local;
 
     if thickness < 1 then
       t := 1;

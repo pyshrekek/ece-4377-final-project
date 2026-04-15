@@ -9,6 +9,8 @@ PACKAGE RENDERING_PIPELINE IS
         center_x : INTEGER;
         center_y : INTEGER;
         side_length : INTEGER;
+        scale_x_q8 : INTEGER; -- 256 = 1.0x
+        scale_y_q8 : INTEGER; -- 256 = 1.0x
         color : color_t;
     END RECORD;
 
@@ -36,6 +38,19 @@ PACKAGE RENDERING_PIPELINE IS
 END PACKAGE RENDERING_PIPELINE;
 
 PACKAGE BODY RENDERING_PIPELINE IS
+
+    FUNCTION div_round_signed(num, den : INTEGER) RETURN INTEGER IS
+    BEGIN
+        IF den = 0 THEN
+            RETURN 0;
+        END IF;
+
+        IF num >= 0 THEN
+            RETURN (num + (den / 2)) / den;
+        ELSE
+            RETURN -(((-num) + (den / 2)) / den);
+        END IF;
+    END FUNCTION;
 
     FUNCTION clamp_u8(v : INTEGER) RETURN INTEGER IS
     BEGIN
@@ -73,10 +88,27 @@ PACKAGE BODY RENDERING_PIPELINE IS
         );
     END FUNCTION;
 
+    FUNCTION clamp_scale_q8(scale_q8 : INTEGER) RETURN INTEGER IS
+    BEGIN
+        IF scale_q8 < 1 THEN
+            RETURN 1;
+        END IF;
+        RETURN scale_q8;
+    END FUNCTION;
+
+    FUNCTION inv_scale_delta_q8(delta_px, scale_q8 : INTEGER) RETURN INTEGER IS
+        VARIABLE s : INTEGER;
+    BEGIN
+        s := clamp_scale_q8(scale_q8);
+        RETURN div_round_signed(delta_px * 256, s);
+    END FUNCTION;
+
     FUNCTION cube_face_id(
         px, py : INTEGER;
         cube : cube_t
     ) RETURN INTEGER IS
+        VARIABLE local_px : INTEGER;
+        VARIABLE local_py : INTEGER;
         CONSTANT half_side : INTEGER := cube.side_length / 2;
         CONSTANT depth_x : INTEGER := cube.side_length / 3;
         CONSTANT depth_y : INTEGER := -cube.side_length / 4;
@@ -99,33 +131,36 @@ PACKAGE BODY RENDERING_PIPELINE IS
         CONSTANT b3_x : INTEGER := f3_x + depth_x;
         CONSTANT b3_y : INTEGER := f3_y + depth_y;
     BEGIN
-        IF is_point_in_triangle(px, py, f0_x, f0_y, f1_x, f1_y, f2_x, f2_y) OR
-           is_point_in_triangle(px, py, f0_x, f0_y, f2_x, f2_y, f3_x, f3_y) THEN
+        local_px := cube.center_x + inv_scale_delta_q8(px - cube.center_x, cube.scale_x_q8);
+        local_py := cube.center_y + inv_scale_delta_q8(py - cube.center_y, cube.scale_y_q8);
+
+        IF is_point_in_triangle(local_px, local_py, f0_x, f0_y, f1_x, f1_y, f2_x, f2_y) OR
+           is_point_in_triangle(local_px, local_py, f0_x, f0_y, f2_x, f2_y, f3_x, f3_y) THEN
             RETURN 1; -- front
         END IF;
 
-        IF is_point_in_triangle(px, py, f1_x, f1_y, f2_x, f2_y, b2_x, b2_y) OR
-           is_point_in_triangle(px, py, f1_x, f1_y, b2_x, b2_y, b1_x, b1_y) THEN
+        IF is_point_in_triangle(local_px, local_py, f1_x, f1_y, f2_x, f2_y, b2_x, b2_y) OR
+           is_point_in_triangle(local_px, local_py, f1_x, f1_y, b2_x, b2_y, b1_x, b1_y) THEN
             RETURN 2; -- right
         END IF;
 
-        IF is_point_in_triangle(px, py, f0_x, f0_y, f1_x, f1_y, b1_x, b1_y) OR
-           is_point_in_triangle(px, py, f0_x, f0_y, b1_x, b1_y, b0_x, b0_y) THEN
+        IF is_point_in_triangle(local_px, local_py, f0_x, f0_y, f1_x, f1_y, b1_x, b1_y) OR
+           is_point_in_triangle(local_px, local_py, f0_x, f0_y, b1_x, b1_y, b0_x, b0_y) THEN
             RETURN 3; -- top
         END IF;
 
-        IF is_point_in_triangle(px, py, b0_x, b0_y, b2_x, b2_y, b1_x, b1_y) OR
-           is_point_in_triangle(px, py, b0_x, b0_y, b3_x, b3_y, b2_x, b2_y) THEN
+        IF is_point_in_triangle(local_px, local_py, b0_x, b0_y, b2_x, b2_y, b1_x, b1_y) OR
+           is_point_in_triangle(local_px, local_py, b0_x, b0_y, b3_x, b3_y, b2_x, b2_y) THEN
             RETURN 4; -- back
         END IF;
 
-        IF is_point_in_triangle(px, py, f0_x, f0_y, b0_x, b0_y, b3_x, b3_y) OR
-           is_point_in_triangle(px, py, f0_x, f0_y, b3_x, b3_y, f3_x, f3_y) THEN
+        IF is_point_in_triangle(local_px, local_py, f0_x, f0_y, b0_x, b0_y, b3_x, b3_y) OR
+           is_point_in_triangle(local_px, local_py, f0_x, f0_y, b3_x, b3_y, f3_x, f3_y) THEN
             RETURN 5; -- left
         END IF;
 
-        IF is_point_in_triangle(px, py, f3_x, f3_y, b3_x, b3_y, b2_x, b2_y) OR
-           is_point_in_triangle(px, py, f3_x, f3_y, b2_x, b2_y, f2_x, f2_y) THEN
+        IF is_point_in_triangle(local_px, local_py, f3_x, f3_y, b3_x, b3_y, b2_x, b2_y) OR
+           is_point_in_triangle(local_px, local_py, f3_x, f3_y, b2_x, b2_y, f2_x, f2_y) THEN
             RETURN 6; -- bottom
         END IF;
 
