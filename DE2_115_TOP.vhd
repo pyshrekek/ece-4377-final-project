@@ -115,13 +115,28 @@ ARCHITECTURE structural OF DE2_115_TOP IS
             pixel_row, pixel_column : OUT STD_LOGIC_VECTOR(9 DOWNTO 0));
     END COMPONENT;
 	 
- 	 COMPONENT GRAPHICS_LAYER
-    PORT (
-        pixel_row, pixel_column : IN STD_LOGIC_VECTOR(9 DOWNTO 0);
-        show_sphere, show_cube  : IN STD_LOGIC;
-        Red, Green, Blue : OUT STD_LOGIC_VECTOR(7 DOWNTO 0);
-        Vert_sync : IN STD_LOGIC);
-END COMPONENT;
+     COMPONENT GRAPHICS_LAYER
+        PORT (
+            pixel_row, pixel_column : IN  STD_LOGIC_VECTOR(9 DOWNTO 0);
+            show_sphere, show_cube  : IN  STD_LOGIC;
+            x_offset                : IN  INTEGER RANGE -320 TO 320;
+            y_offset                : IN  INTEGER RANGE -240 TO 240;
+            zoom_level              : IN  INTEGER RANGE 0 TO 4;
+            Red, Green, Blue        : OUT STD_LOGIC_VECTOR(7 DOWNTO 0);
+            Vert_sync               : IN  STD_LOGIC);
+    END COMPONENT;
+
+    COMPONENT BUTTON_CONTROL
+        PORT (
+            clk         : IN  STD_LOGIC;
+            vert_sync   : IN  STD_LOGIC;
+            key_n       : IN  STD_LOGIC_VECTOR(3 DOWNTO 0);
+            zoom_in_sw  : IN  STD_LOGIC;
+            zoom_out_sw : IN  STD_LOGIC;
+            x_offset    : OUT INTEGER RANGE -320 TO 320;
+            y_offset    : OUT INTEGER RANGE -240 TO 240;
+            zoom_level  : OUT INTEGER RANGE 0 TO 4);
+    END COMPONENT;
 
     SIGNAL red_int         : STD_LOGIC_VECTOR(7 DOWNTO 0);
     SIGNAL green_int       : STD_LOGIC_VECTOR(7 DOWNTO 0);
@@ -135,6 +150,14 @@ END COMPONENT;
     SIGNAL pixel_clock_int : STD_LOGIC;
     SIGNAL pixel_row_int   : STD_LOGIC_VECTOR(9 DOWNTO 0);
     SIGNAL pixel_column_int: STD_LOGIC_VECTOR(9 DOWNTO 0);
+
+    -- Pan / zoom state (driven by BUTTON_CONTROL)
+    -- SW(0): show_sphere  SW(1): show_cube  (unchanged)
+    -- KEY(0-3): move right/left/down/up
+    -- SW(2): zoom in  SW(3): zoom out
+    SIGNAL x_offset_int    : INTEGER RANGE -320 TO 320 := 0;
+    SIGNAL y_offset_int    : INTEGER RANGE -240 TO 240 := 0;
+    SIGNAL zoom_level_int  : INTEGER RANGE 0 TO 4      := 2;
 
 BEGIN
 
@@ -161,15 +184,32 @@ BEGIN
         pixel_column   => pixel_column_int
     );
 
-    U2 : GRAPHICS_LAYER PORT MAP
-(
-    pixel_row => pixel_row_int,
-    pixel_column => pixel_column_int,
-    show_sphere => SW(0),
-    show_cube => SW(1),
-    Red => red_int,
-    Green => green_int,
-    Blue => blue_int,
-    Vert_sync => vert_sync_int
-);
+    -- Pan/zoom input handler
+    -- KEY(0): right  KEY(1): left  KEY(2): down  KEY(3): up
+    -- SW(2): zoom in (hold)        SW(3): zoom out (hold)
+    U3 : BUTTON_CONTROL PORT MAP (
+        clk         => CLOCK_50,
+        vert_sync   => vert_sync_int,
+        key_n       => KEY,
+        zoom_in_sw  => SW(2),
+        zoom_out_sw => SW(3),
+        x_offset    => x_offset_int,
+        y_offset    => y_offset_int,
+        zoom_level  => zoom_level_int
+    );
+
+    U2 : GRAPHICS_LAYER PORT MAP (
+        pixel_row    => pixel_row_int,
+        pixel_column => pixel_column_int,
+        show_sphere  => SW(0),
+        show_cube    => SW(1),
+        x_offset     => x_offset_int,
+        y_offset     => y_offset_int,
+        zoom_level   => zoom_level_int,
+        Red          => red_int,
+        Green        => green_int,
+        Blue         => blue_int,
+        Vert_sync    => vert_sync_int
+    );
+
 END structural;
