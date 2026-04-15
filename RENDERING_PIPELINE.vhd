@@ -100,6 +100,9 @@ PACKAGE BODY RENDERING_PIPELINE IS
         VARIABLE s : INTEGER;
     BEGIN
         s := clamp_scale_q8(scale_q8);
+        IF s = 256 THEN
+            RETURN delta_px;
+        END IF;
         RETURN div_round_signed(delta_px * 256, s);
     END FUNCTION;
 
@@ -149,21 +152,9 @@ PACKAGE BODY RENDERING_PIPELINE IS
             RETURN 3; -- top
         END IF;
 
-        IF is_point_in_triangle(local_px, local_py, b0_x, b0_y, b2_x, b2_y, b1_x, b1_y) OR
-           is_point_in_triangle(local_px, local_py, b0_x, b0_y, b3_x, b3_y, b2_x, b2_y) THEN
-            RETURN 4; -- back
-        END IF;
-
-        IF is_point_in_triangle(local_px, local_py, f0_x, f0_y, b0_x, b0_y, b3_x, b3_y) OR
-           is_point_in_triangle(local_px, local_py, f0_x, f0_y, b3_x, b3_y, f3_x, f3_y) THEN
-            RETURN 5; -- left
-        END IF;
-
-        IF is_point_in_triangle(local_px, local_py, f3_x, f3_y, b3_x, b3_y, b2_x, b2_y) OR
-           is_point_in_triangle(local_px, local_py, f3_x, f3_y, b2_x, b2_y, f2_x, f2_y) THEN
-            RETURN 6; -- bottom
-        END IF;
-
+        -- Hidden faces (back/left/bottom) are intentionally not classified.
+        -- Restricting to visible faces keeps per-face shading while reducing
+        -- overlap ambiguity that can present as streaking on hardware.
         RETURN 0;
     END FUNCTION;
 
@@ -194,7 +185,7 @@ PACKAGE BODY RENDERING_PIPELINE IS
         cube : cube_t;
         light : light_t
     ) RETURN color_t IS
-        VARIABLE face_id : INTEGER;
+        VARIABLE face_id  : INTEGER;
         VARIABLE shade_q8 : INTEGER;
     BEGIN
         face_id := cube_face_id(x, y, cube);
