@@ -115,9 +115,10 @@ ARCHITECTURE structural OF DE2_115_TOP IS
             pixel_row, pixel_column : OUT STD_LOGIC_VECTOR(9 DOWNTO 0));
     END COMPONENT;
 	 
-	 COMPONENT GRAPHICS_LAYER
+ 	 COMPONENT GRAPHICS_LAYER
     PORT (
         pixel_row, pixel_column : IN STD_LOGIC_VECTOR(9 DOWNTO 0);
+        show_sphere, show_cube  : IN STD_LOGIC;
         Red, Green, Blue : OUT STD_LOGIC_VECTOR(7 DOWNTO 0);
         Vert_sync : IN STD_LOGIC);
 END COMPONENT;
@@ -164,6 +165,8 @@ BEGIN
 (
     pixel_row => pixel_row_int,
     pixel_column => pixel_column_int,
+    show_sphere => SW(0),
+    show_cube => SW(1),
     Red => red_int,
     Green => green_int,
     Blue => blue_int,

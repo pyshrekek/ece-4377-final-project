@@ -21,6 +21,8 @@ entity graphics_layer is
     pixel_row    : in    std_logic_vector(9 downto 0);
     pixel_column : in    std_logic_vector(9 downto 0);
     vert_sync    : in    std_logic;
+    show_sphere  : in    std_logic;
+    show_cube    : in    std_logic;
     red          : out   std_logic_vector(7 downto 0);
     green        : out   std_logic_vector(7 downto 0);
     blue         : out   std_logic_vector(7 downto 0)
@@ -42,7 +44,7 @@ begin
   -- Front-to-back priority: index 0 is drawn on top.
   -- Walk back-to-front (highest index first) so index 0 overwrites last.
   -- Spheres are then composited with the same per-index priority.
-  render_proc : process (x, y) is
+  render_proc : process (x, y, show_sphere, show_cube) is
 
     variable color : color_t;
     variable hit   : color_t;
@@ -51,29 +53,33 @@ begin
 
     color := BACKGROUND_COLOR;
 
-    for i in NUM_CUBES - 1 downto 0 loop
+    if show_cube = '1' then
+      for i in NUM_CUBES - 1 downto 0 loop
 
-      hit := render_lit_cube_pixel(x, y, SCENE(i), SCENE_LIGHT);
+        hit := render_lit_cube_pixel(x, y, SCENE(i), SCENE_LIGHT);
 
-      if ((hit.r /= x"00") or (hit.g /= x"00") or (hit.b /= x"00")) then
-        color := hit;
-      end if;
+        if ((hit.r /= x"00") or (hit.g /= x"00") or (hit.b /= x"00")) then
+          color := hit;
+        end if;
 
-    end loop;
+      end loop;
+    end if;
 
-    for i in NUM_SPHERES - 1 downto 0 loop
- 
-      if SPHERE_WIREFRAME_MODE then
-        hit := render_wireframe_sphere_pixel(x, y, SCENE_SPHERES(i), 2);
-      else
-        hit := render_lit_sphere_pixel(x, y, SCENE_SPHERES(i), SCENE_LIGHT);
-      end if;
- 
-      if ((hit.r /= x"00") or (hit.g /= x"00") or (hit.b /= x"00")) then
-        color := hit;
-      end if;
+    if show_sphere = '1' then
+      for i in NUM_SPHERES - 1 downto 0 loop
 
-    end loop;
+        if SPHERE_WIREFRAME_MODE then
+          hit := render_wireframe_sphere_pixel(x, y, SCENE_SPHERES(i), 2);
+        else
+          hit := render_lit_sphere_pixel(x, y, SCENE_SPHERES(i), SCENE_LIGHT);
+        end if;
+
+        if ((hit.r /= x"00") or (hit.g /= x"00") or (hit.b /= x"00")) then
+          color := hit;
+        end if;
+
+      end loop;
+    end if;
 
     pixel_color <= color;
 
