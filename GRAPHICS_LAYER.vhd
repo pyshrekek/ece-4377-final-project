@@ -54,29 +54,33 @@ architecture behavioral of graphics_layer is
 
   signal frame_show_sphere        : std_logic := '1';
   signal frame_show_cube          : std_logic := '1';
-  signal frame_cycle_cube_color   : std_logic := '0';
-  signal frame_cycle_sphere_color : std_logic := '0';
-  signal frame_x_offset           : integer range -320 to 320 := 0;
-  signal frame_y_offset           : integer range -240 to 240 := 0;
-  signal frame_zoom_level         : integer range 0 to 4 := 2;
+  signal frame_cubes              : cube_scene_t(SCENE'range) := SCENE;
+  signal frame_spheres            : sphere_scene_t(SCENE_SPHERES'range) := SCENE_SPHERES;
 
   signal vert_sync_s1       : std_logic := '0';
   signal vert_sync_s2       : std_logic := '0';
   signal vert_sync_prev     : std_logic := '0';
 
-  signal req_s0        : std_logic := '0';
-  signal req_s1        : std_logic := '0';
-  signal x_s0          : integer range 0 to 639 := 0;
-  signal y_s0          : integer range 0 to 479 := 0;
-  signal x_s1          : integer range 0 to 639 := 0;
-  signal y_s1          : integer range 0 to 479 := 0;
-  signal scale_num_s0  : integer range 1 to 4 := 1;
-  signal scale_den_s0  : integer range 1 to 4 := 1;
-  signal scale_num_s1  : integer range 1 to 4 := 1;
-  signal scale_den_s1  : integer range 1 to 4 := 1;
-  signal cube_color_s1 : color_t := BACKGROUND_COLOR;
+  type render_state_t is (
+    RENDER_IDLE,
+    RENDER_CUBE,
+    RENDER_SPHERE_PREP,
+    RENDER_SPHERE_SHADE
+  );
+  signal render_state  : render_state_t := RENDER_IDLE;
+
+  signal pixel_x_r     : integer range 0 to 639 := 0;
+  signal pixel_y_r     : integer range 0 to 479 := 0;
+  signal work_color_r  : color_t := BACKGROUND_COLOR;
   signal render_color_r: color_t := BACKGROUND_COLOR;
   signal render_valid_r: std_logic := '0';
+
+  signal sphere_idx_r        : integer range SCENE_SPHERES'low to SCENE_SPHERES'high := SCENE_SPHERES'high;
+  signal sphere_dx_local_r   : integer := 0;
+  signal sphere_dy_local_r   : integer := 0;
+  signal sphere_z_r          : integer := 0;
+  signal sphere_radius_r     : integer := 0;
+  signal sphere_base_color_r : color_t := BACKGROUND_COLOR;
 
   function div_round_signed_256(num : integer) return integer is
   begin
@@ -170,12 +174,12 @@ architecture behavioral of graphics_layer is
     end case;
   end function;
 
-  function cycle_active(cycle_sw, latched : std_logic) return std_logic is
+  function abs_int(v : integer) return integer is
   begin
-    if (cycle_sw = '1') or (latched = '1') then
-      return '1';
+    if v < 0 then
+      return -v;
     end if;
-    return '0';
+    return v;
   end function;
 
   function rotated_x(px, py : integer; m : mat4) return integer is
@@ -233,63 +237,21 @@ architecture behavioral of graphics_layer is
   end function;
 
   function render_cubes_pixel(
-    x, y                         : integer;
-    show_cube                    : std_logic;
-    cycle_cube                   : std_logic;
-    cube_phase                   : integer;
-    scale_num, scale_den         : integer;
-    x_offset, y_offset           : integer
+    x, y      : integer;
+    show_cube : std_logic;
+    cubes     : cube_scene_t
   ) return color_t is
-    variable scaled_cube : cube_t;
-    variable color       : color_t;
-    variable hit         : color_t;
+    variable cube_ref : cube_t;
+    variable color    : color_t;
+    variable hit      : color_t;
   begin
     color := BACKGROUND_COLOR;
     if show_cube = '1' then
-      for i in SCENE'reverse_range loop
-        scaled_cube := transform_cube(SCENE(i), ROT_NONE_MAT, scale_num, scale_den, x_offset, y_offset);
-        if cycle_cube = '1' then
-          scaled_cube.color := rgb_cycle_color(cube_phase);
-        end if;
-
-        hit := render_lit_cube_pixel(x, y, scaled_cube, SCENE_LIGHT);
+      for i in cubes'reverse_range loop
+        cube_ref := cubes(i);
+        hit := render_lit_cube_pixel(x, y, cube_ref, SCENE_LIGHT);
         if ((hit.r /= x"00") or (hit.g /= x"00") or (hit.b /= x"00")) then
           color := hit;
-        end if;
-      end loop;
-    end if;
-    return color;
-  end function;
-
-  function render_spheres_over_pixel(
-    x, y                         : integer;
-    base_color                   : color_t;
-    show_sphere                  : std_logic;
-    cycle_sphere                 : std_logic;
-    sphere_phase                 : integer;
-    scale_num, scale_den         : integer;
-    x_offset, y_offset           : integer
-  ) return color_t is
-    variable scaled_sphere : sphere_t;
-    variable sample        : sphere_sample_t;
-    variable color         : color_t;
-  begin
-    color := base_color;
-    if show_sphere = '1' then
-      for i in SCENE_SPHERES'reverse_range loop
-        scaled_sphere := transform_sphere(SCENE_SPHERES(i), ROT_NONE_MAT, scale_num, scale_den, x_offset, y_offset);
-        if cycle_sphere = '1' then
-          scaled_sphere.color := rgb_cycle_color(sphere_phase);
-        end if;
-
-        if SPHERE_WIREFRAME_MODE then
-          sample := sample_wireframe_sphere_pixel(x, y, scaled_sphere, 2);
-        else
-          sample := sample_lit_sphere_pixel(x, y, scaled_sphere, SCENE_LIGHT);
-        end if;
-
-        if sample.hit = '1' then
-          color := sample.color;
         end if;
       end loop;
     end if;
@@ -299,14 +261,39 @@ architecture behavioral of graphics_layer is
 begin
 
   pipeline_proc : process (clk_50) is
-    variable stage2_color      : color_t;
-    variable cube_cycle_enable : std_logic;
-    variable sph_cycle_enable  : std_logic;
-    variable x_req             : integer range 0 to 639;
-    variable y_req             : integer range 0 to 479;
+    variable sphere_ref         : sphere_t;
+    variable sample             : sphere_sample_t;
+    variable work_color_v       : color_t;
+    variable cube_color_v       : color_t;
+    variable x_req              : integer range 0 to 639;
+    variable y_req              : integer range 0 to 479;
+    variable scale_num_frame    : integer range 1 to 4;
+    variable scale_den_frame    : integer range 1 to 4;
+    variable next_cube_phase    : integer range 0 to RGB_CYCLE_MAX;
+    variable next_sphere_phase  : integer range 0 to RGB_CYCLE_MAX;
+    variable cube_cycle_frame   : std_logic;
+    variable sphere_cycle_frame : std_logic;
+    variable transformed_cube   : cube_t;
+    variable transformed_sphere : sphere_t;
+    variable dx                 : integer;
+    variable dy                 : integer;
+    variable dx_local           : integer;
+    variable dy_local           : integer;
+    variable radius2            : integer;
+    variable dist2              : integer;
+    variable adx                : integer;
+    variable ady                : integer;
+    variable major              : integer;
+    variable minor              : integer;
+    variable radial_approx      : integer;
+    variable z_approx           : integer;
+    variable dot_num            : integer;
+    variable dot_q8             : integer;
+    variable shade              : integer;
   begin
     if rising_edge(clk_50) then
       render_valid_r <= '0';
+      work_color_v := work_color_r;
 
       -- Sync vert_sync into clk_50 domain and sample controls once per frame.
       vert_sync_s1 <= vert_sync;
@@ -314,69 +301,176 @@ begin
       if (vert_sync_s2 = '1') and (vert_sync_prev = '0') then
         frame_show_sphere <= show_sphere;
         frame_show_cube <= show_cube;
-        frame_cycle_cube_color <= cycle_cube_color;
-        frame_cycle_sphere_color <= cycle_sphere_color;
-        frame_x_offset <= x_offset;
-        frame_y_offset <= y_offset;
-        frame_zoom_level <= zoom_level;
 
+        cube_cycle_frame := cycle_cube_color;
+        if cube_cycle_latched = '1' then
+          cube_cycle_frame := '1';
+        end if;
+        sphere_cycle_frame := cycle_sphere_color;
+        if sphere_cycle_latched = '1' then
+          sphere_cycle_frame := '1';
+        end if;
+
+        next_cube_phase := cube_color_phase;
         if cycle_cube_color = '1' then
-          cube_color_phase <= next_rgb_phase(cube_color_phase);
+          next_cube_phase := next_rgb_phase(cube_color_phase);
+          cube_color_phase <= next_cube_phase;
           cube_cycle_latched <= '1';
         end if;
 
+        next_sphere_phase := sphere_color_phase;
         if cycle_sphere_color = '1' then
-          sphere_color_phase <= next_rgb_phase(sphere_color_phase);
+          next_sphere_phase := next_rgb_phase(sphere_color_phase);
+          sphere_color_phase <= next_sphere_phase;
           sphere_cycle_latched <= '1';
         end if;
+
+        scale_num_frame := zoom_scale_num(zoom_level);
+        scale_den_frame := zoom_scale_den(zoom_level);
+
+        for i in SCENE'range loop
+          transformed_cube := transform_cube(SCENE(i), ROT_NONE_MAT, scale_num_frame, scale_den_frame, x_offset, y_offset);
+          if cube_cycle_frame = '1' then
+            transformed_cube.color := rgb_cycle_color(next_cube_phase);
+          end if;
+          frame_cubes(i) <= transformed_cube;
+        end loop;
+
+        for i in SCENE_SPHERES'range loop
+          transformed_sphere := transform_sphere(SCENE_SPHERES(i), ROT_NONE_MAT, scale_num_frame, scale_den_frame, x_offset, y_offset);
+          if sphere_cycle_frame = '1' then
+            transformed_sphere.color := rgb_cycle_color(next_sphere_phase);
+          end if;
+          frame_spheres(i) <= transformed_sphere;
+        end loop;
       end if;
       vert_sync_prev <= vert_sync_s2;
 
-      -- Stage 2: sphere composite + final output register.
-      if req_s1 = '1' then
-        sph_cycle_enable := cycle_active(frame_cycle_sphere_color, sphere_cycle_latched);
-        stage2_color := render_spheres_over_pixel(
-          x_s1, y_s1, cube_color_s1,
-          frame_show_sphere,
-          sph_cycle_enable,
-          sphere_color_phase,
-          scale_num_s1, scale_den_s1,
-          frame_x_offset, frame_y_offset
-        );
-        render_color_r <= stage2_color;
-        render_valid_r <= '1';
-      end if;
+      case render_state is
+        when RENDER_IDLE =>
+          if render_req = '1' then
+            x_req := to_integer(unsigned(pixel_column));
+            y_req := to_integer(unsigned(pixel_row));
+            pixel_x_r <= x_req;
+            pixel_y_r <= y_req;
+            render_state <= RENDER_CUBE;
+          end if;
 
-      -- Stage 1: cube pass register.
-      req_s1 <= req_s0;
-      x_s1 <= x_s0;
-      y_s1 <= y_s0;
-      scale_num_s1 <= scale_num_s0;
-      scale_den_s1 <= scale_den_s0;
-      if req_s0 = '1' then
-        cube_cycle_enable := cycle_active(frame_cycle_cube_color, cube_cycle_latched);
-        cube_color_s1 <= render_cubes_pixel(
-          x_s0, y_s0,
-          frame_show_cube,
-          cube_cycle_enable,
-          cube_color_phase,
-          scale_num_s0, scale_den_s0,
-          frame_x_offset, frame_y_offset
-        );
-      end if;
+        when RENDER_CUBE =>
+          cube_color_v := render_cubes_pixel(
+            pixel_x_r, pixel_y_r,
+            frame_show_cube,
+            frame_cubes
+          );
+          work_color_v := cube_color_v;
+          work_color_r <= work_color_v;
 
-      -- Stage 0: request capture.
-      if render_req = '1' then
-        x_req := to_integer(unsigned(pixel_column));
-        y_req := to_integer(unsigned(pixel_row));
-        req_s0 <= '1';
-        x_s0 <= x_req;
-        y_s0 <= y_req;
-        scale_num_s0 <= zoom_scale_num(frame_zoom_level);
-        scale_den_s0 <= zoom_scale_den(frame_zoom_level);
-      else
-        req_s0 <= '0';
-      end if;
+          if frame_show_sphere = '1' then
+            sphere_idx_r <= SCENE_SPHERES'high;
+            render_state <= RENDER_SPHERE_PREP;
+          else
+            render_color_r <= cube_color_v;
+            render_valid_r <= '1';
+            render_state <= RENDER_IDLE;
+          end if;
+
+        when RENDER_SPHERE_PREP =>
+          sphere_ref := frame_spheres(sphere_idx_r);
+          if SPHERE_WIREFRAME_MODE then
+            sample := sample_wireframe_sphere_pixel(pixel_x_r, pixel_y_r, sphere_ref, 2);
+            if sample.hit = '1' then
+              work_color_v := sample.color;
+              work_color_r <= work_color_v;
+            end if;
+
+            if sphere_idx_r = SCENE_SPHERES'low then
+              render_color_r <= work_color_v;
+              render_valid_r <= '1';
+              render_state <= RENDER_IDLE;
+            else
+              sphere_idx_r <= sphere_idx_r - 1;
+            end if;
+          else
+            if sphere_ref.radius <= 0 then
+              if sphere_idx_r = SCENE_SPHERES'low then
+                render_color_r <= work_color_v;
+                render_valid_r <= '1';
+                render_state <= RENDER_IDLE;
+              else
+                sphere_idx_r <= sphere_idx_r - 1;
+              end if;
+            else
+              dx := pixel_x_r - sphere_ref.center_x;
+              dy := pixel_y_r - sphere_ref.center_y;
+              dx_local := inv_scale_delta_q8(dx, sphere_ref.scale_x_q8);
+              dy_local := inv_scale_delta_q8(dy, sphere_ref.scale_y_q8);
+              radius2 := sphere_ref.radius * sphere_ref.radius;
+              dist2 := dx_local * dx_local + dy_local * dy_local;
+
+              if dist2 > radius2 then
+                if sphere_idx_r = SCENE_SPHERES'low then
+                  render_color_r <= work_color_v;
+                  render_valid_r <= '1';
+                  render_state <= RENDER_IDLE;
+                else
+                  sphere_idx_r <= sphere_idx_r - 1;
+                end if;
+              else
+                adx := abs_int(dx_local);
+                ady := abs_int(dy_local);
+                if adx >= ady then
+                  major := adx;
+                  minor := ady;
+                else
+                  major := ady;
+                  minor := adx;
+                end if;
+                radial_approx := major + ((3 * minor) / 8);
+                z_approx := sphere_ref.radius - radial_approx;
+                if z_approx < 0 then
+                  z_approx := 0;
+                end if;
+
+                sphere_dx_local_r <= dx_local;
+                sphere_dy_local_r <= dy_local;
+                sphere_z_r <= z_approx;
+                sphere_radius_r <= sphere_ref.radius;
+                sphere_base_color_r <= sphere_ref.color;
+                render_state <= RENDER_SPHERE_SHADE;
+              end if;
+            end if;
+          end if;
+
+        when RENDER_SPHERE_SHADE =>
+          dot_num := (sphere_dx_local_r * SCENE_LIGHT.x_q8) +
+                     (sphere_dy_local_r * SCENE_LIGHT.y_q8) +
+                     (sphere_z_r * SCENE_LIGHT.z_q8);
+          if dot_num < 0 then
+            dot_q8 := 0;
+          else
+            if sphere_radius_r <= 32 then
+              dot_q8 := dot_num / 32;
+            elsif sphere_radius_r <= 64 then
+              dot_q8 := dot_num / 64;
+            elsif sphere_radius_r <= 128 then
+              dot_q8 := dot_num / 128;
+            else
+              dot_q8 := dot_num / 256;
+            end if;
+          end if;
+
+          shade := shade_from_dot_q8(dot_q8, SCENE_LIGHT);
+          work_color_v := scale_color(sphere_base_color_r, shade);
+          work_color_r <= work_color_v;
+          if sphere_idx_r = SCENE_SPHERES'low then
+            render_color_r <= work_color_v;
+            render_valid_r <= '1';
+            render_state <= RENDER_IDLE;
+          else
+            sphere_idx_r <= sphere_idx_r - 1;
+            render_state <= RENDER_SPHERE_PREP;
+          end if;
+      end case;
     end if;
   end process pipeline_proc;
 

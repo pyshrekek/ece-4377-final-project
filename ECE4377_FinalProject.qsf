@@ -1118,7 +1118,6 @@ set_global_assignment -name VHDL_FILE types.VHD
 set_global_assignment -name VHDL_FILE TRANSFORMS.vhd
 set_global_assignment -name VHDL_FILE RENDERING_PIPELINE.vhd
 set_global_assignment -name VHDL_FILE SPHERE_RENDERING.vhd
-set_global_assignment -name VHDL_FILE FRAMEBUFFER_SRAM.vhd
 set_global_assignment -name VHDL_FILE DEFINE_OBJECTS.vhd
 set_global_assignment -name VHDL_FILE BALL.VHD
 set_global_assignment -name VHDL_FILE DE2_115_TOP.vhd
