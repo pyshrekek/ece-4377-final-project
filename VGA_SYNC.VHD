@@ -107,7 +107,7 @@ BEGIN
             video_on_h <= '0';
         END IF;
 
-        IF (v_count <= V_pixels_down) THEN
+        IF (v_count < V_pixels_down) THEN
             video_on_v <= '1';
             pixel_row <= v_count;
         ELSE

@@ -13,3 +13,11 @@ Graphics engine written in VHDL. Displays an image on VGA monitor via the DE2-11
 - `SW(16)`: continuously rotate cube clockwise
 - `SW(17)`: continuously rotate cube counterclockwise
 - `KEY(0..3)`: pan right/left/down/up
+
+## Framebuffer architecture
+
+- The design now uses a 640x480 RGB565 **double framebuffer** in external SRAM.
+- VGA scans out from a front buffer while `GRAPHICS_LAYER` renders into a back buffer.
+- Conservative SRAM timing mode: front-buffer reads happen during active video, and back-buffer writes are restricted to blanking intervals.
+- Buffers swap on `vert_sync` only after a full back-buffer render completes.
+- Animation phase updates are keyed off completed buffer swaps so one rendered frame uses one consistent scene state.

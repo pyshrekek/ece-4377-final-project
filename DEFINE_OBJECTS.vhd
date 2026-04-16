@@ -37,9 +37,9 @@ package define_objects is
   -- Normalized: divide by 293.5 then scale by 256: (139, 96, 191)
   constant scene_light : light_t :=
   (
-    x_q8       => 139,
-    y_q8       => 96,
-    z_q8       => 191,
+    x_q8       => 200,
+    y_q8       => 200,
+    z_q8       => 100,
     ambient_q8 => 88,
     diffuse_q8 => 224
   );

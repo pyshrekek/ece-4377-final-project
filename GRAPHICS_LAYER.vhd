@@ -23,6 +23,7 @@ entity graphics_layer is
     pixel_row    : in    std_logic_vector(9 downto 0);
     pixel_column : in    std_logic_vector(9 downto 0);
     vert_sync    : in    std_logic;
+    anim_tick    : in    std_logic;
     show_sphere  : in    std_logic;
     show_cube    : in    std_logic;
     cycle_cube_color   : in    std_logic;
@@ -212,11 +213,11 @@ begin
   x <= to_integer(unsigned(pixel_column));
   y <= to_integer(unsigned(pixel_row));
 
-  color_cycle_proc : process (vert_sync) is
+  color_cycle_proc : process (anim_tick) is
     variable next_cube_color_phase   : integer;
     variable next_sphere_color_phase : integer;
   begin
-    if rising_edge(vert_sync) then
+    if rising_edge(anim_tick) then
       next_cube_color_phase := cube_color_phase;
       next_sphere_color_phase := sphere_color_phase;
 
