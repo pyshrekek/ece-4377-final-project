@@ -23,6 +23,11 @@ PACKAGE RENDERING_PIPELINE IS
         diffuse_q8 : INTEGER;
     END RECORD;
 
+    -- Shared fixed-point pixel helpers used by primitive renderers.
+    FUNCTION clamp_u8(v : INTEGER) RETURN INTEGER;
+    FUNCTION inv_scale_delta_q8(delta_px, scale_q8 : INTEGER) RETURN INTEGER;
+    FUNCTION scale_color(base_color : color_t; shade_q8 : INTEGER) RETURN color_t;
+
     FUNCTION render_lit_cube_pixel(
         x, y : INTEGER;
         cube : cube_t;

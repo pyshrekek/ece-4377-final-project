@@ -40,74 +40,12 @@ end package sphere_rendering;
 
 package body sphere_rendering is
 
-  function div_round_signed(num, den : integer) return integer is
-  begin
-    if den = 0 then
-      return 0;
-    end if;
-
-    if num >= 0 then
-      return (num + (den / 2)) / den;
-    else
-      return -(((-num) + (den / 2)) / den);
-    end if;
-  end function;
-
-  function clamp_u8(v : integer) return integer is
-  begin
-    if v < 0 then
-      return 0;
-    elsif v > 255 then
-      return 255;
-    end if;
-    return v;
-  end function;
-
   function abs_int(v : integer) return integer is
   begin
     if v < 0 then
       return -v;
     end if;
     return v;
-  end function;
-
-  function clamp_scale_q8(scale_q8 : integer) return integer is
-  begin
-    if scale_q8 < 1 then
-      return 1;
-    end if;
-    return scale_q8;
-  end function;
-
-  function inv_scale_delta_q8(delta_px, scale_q8 : integer) return integer is
-    variable s : integer;
-  begin
-    s := clamp_scale_q8(scale_q8);
-    return div_round_signed(delta_px * 256, s);
-  end function;
-
-  function to_slv8(v : integer) return std_logic_vector is
-  begin
-    return std_logic_vector(to_unsigned(clamp_u8(v), 8));
-  end function;
-
-  function scale_color(base_color : color_t; shade_q8 : integer) return color_t is
-    variable base_r : integer;
-    variable base_g : integer;
-    variable base_b : integer;
-    variable shade  : integer;
-  begin
-    base_r := to_integer(unsigned(base_color.r));
-    base_g := to_integer(unsigned(base_color.g));
-    base_b := to_integer(unsigned(base_color.b));
-    shade := clamp_u8(shade_q8);
-
-    return (
-      -- /256 keeps this path to shifts/adds in synthesis.
-      r => to_slv8((base_r * shade + 128) / 256),
-      g => to_slv8((base_g * shade + 128) / 256),
-      b => to_slv8((base_b * shade + 128) / 256)
-    );
   end function;
 
   function render_lit_sphere_pixel(
