@@ -26,6 +26,8 @@ entity framebuffer_sram is
 
     render_row     : out std_logic_vector(9 downto 0);
     render_col     : out std_logic_vector(9 downto 0);
+    render_req     : out std_logic;
+    render_valid   : in  std_logic;
     render_red     : in  std_logic_vector(7 downto 0);
     render_green   : in  std_logic_vector(7 downto 0);
     render_blue    : in  std_logic_vector(7 downto 0);
@@ -70,9 +72,13 @@ architecture rtl of framebuffer_sram is
   signal display_col_s2   : std_logic_vector(9 downto 0) := (others => '0');
   signal vsync_prev       : std_logic := '0';
   signal read_pending     : std_logic := '0';
-  signal display_prev     : std_logic := '0';
-  signal last_disp_row    : unsigned(9 downto 0) := (others => '0');
-  signal last_disp_col    : unsigned(9 downto 0) := (others => '0');
+  type write_state_t is (WRITE_ISSUE, WRITE_WAIT_VALID, WRITE_COMMIT);
+  signal write_state      : write_state_t := WRITE_ISSUE;
+  signal render_issue_x   : integer range 0 to WIDTH - 1 := 0;
+  signal render_issue_y   : integer range 0 to HEIGHT - 1 := 0;
+  signal render_req_r     : std_logic := '0';
+  signal write_addr_stage : unsigned(19 downto 0) := (others => '0');
+  signal write_data_stage : unsigned(15 downto 0) := (others => '0');
 
   signal sram_addr_r      : unsigned(19 downto 0) := (others => '0');
   signal sram_we_n_r      : std_logic := '1';
@@ -114,8 +120,9 @@ architecture rtl of framebuffer_sram is
 
 begin
 
-  render_row <= std_logic_vector(to_unsigned(render_y, 10));
-  render_col <= std_logic_vector(to_unsigned(render_x, 10));
+  render_row <= std_logic_vector(to_unsigned(render_issue_y, 10));
+  render_col <= std_logic_vector(to_unsigned(render_issue_x, 10));
+  render_req <= render_req_r;
 
   display_red   <= disp_r;
   display_green <= disp_g;
@@ -131,13 +138,11 @@ begin
 
   arbiter_proc : process (clk_50) is
     variable read_addr  : unsigned(19 downto 0);
-    variable write_addr : unsigned(19 downto 0);
     variable pix565     : unsigned(15 downto 0);
     variable disp_row_u : unsigned(9 downto 0);
     variable disp_col_u : unsigned(9 downto 0);
     variable in_bounds  : boolean;
     variable need_read  : boolean;
-    variable stable_sample : boolean;
   begin
     if rising_edge(clk_50) then
       -- Synchronize VGA-domain control/coordinate inputs into clk_50 domain.
@@ -154,7 +159,6 @@ begin
       disp_col_u := unsigned(display_col_s2);
       in_bounds := (disp_col_u <= MAX_COL_U10) and (disp_row_u <= MAX_ROW_U10);
       need_read := false;
-      stable_sample := (display_row_s1 = display_row_s2) and (display_col_s1 = display_col_s2);
 
       -- Swap only at frame boundary after a complete back-buffer render.
       if vert_sync_s2 = '1' and vsync_prev = '0' then
@@ -165,70 +169,83 @@ begin
           render_x    <= 0;
           render_y    <= 0;
           render_done <= '0';
+          write_state <= WRITE_ISSUE;
         end if;
       end if;
       vsync_prev <= vert_sync_s2;
 
       -- Defaults: no SRAM operation.
+      render_req_r <= '0';
       sram_dq_oe  <= '0';
       sram_we_n_r <= '1';
       sram_oe_n_r <= '1';
 
-      -- Complete prior read (one-cycle latency).
+      -- Complete prior read (one-cycle latency). Read completion occupies this cycle.
       if read_pending = '1' then
         pix565 := sram_dq;
         disp_r <= std_logic_vector(pix565(15 downto 11) & pix565(15 downto 13));
         disp_g <= std_logic_vector(pix565(10 downto 5) & pix565(10 downto 9));
         disp_b <= std_logic_vector(pix565(4 downto 0) & pix565(4 downto 2));
         read_pending <= '0';
-      end if;
-
-      -- Request a new display read whenever scan coordinate changes.
-      if (display_active_s2 = '1') and (display_active_s1 = display_active_s2) and stable_sample and (front_valid = '1') and in_bounds then
-        if (display_prev = '0') or (disp_col_u /= last_disp_col) or (disp_row_u /= last_disp_row) then
+      else
+        -- Request display reads continuously during active scan.
+        if (display_active_s2 = '1') and (front_valid = '1') and in_bounds then
           need_read := true;
         end if;
-      end if;
 
-      if need_read then
-        read_addr := front_base + pixel_offset(disp_col_u, disp_row_u);
-        sram_addr_r <= read_addr;
-        sram_oe_n_r <= '0';
-        read_pending <= '1';
-        last_disp_col <= disp_col_u;
-        last_disp_row <= disp_row_u;
-        -- Suppress one-cycle seam at x=0 where prior-line tail can leak.
-        if disp_col_u = 0 then
+        if need_read then
+          read_addr := front_base + pixel_offset(disp_col_u, disp_row_u);
+          sram_addr_r <= read_addr;
+          sram_oe_n_r <= '0';
+          read_pending <= '1';
+          -- Suppress one-cycle seam at x=0 where prior-line tail can leak.
+          if disp_col_u = 0 then
+            disp_r <= (others => '0');
+            disp_g <= (others => '0');
+            disp_b <= (others => '0');
+          end if;
+
+        elsif render_done = '0' then
+          case write_state is
+            when WRITE_ISSUE =>
+              render_issue_x <= render_x;
+              render_issue_y <= render_y;
+              write_addr_stage <= back_base + render_offset(render_x, render_y);
+              render_req_r <= '1';
+              write_state <= WRITE_WAIT_VALID;
+
+            when WRITE_WAIT_VALID =>
+              if render_valid = '1' then
+                write_data_stage <= rgb888_to_565(render_red, render_green, render_blue);
+                write_state <= WRITE_COMMIT;
+              end if;
+
+            when WRITE_COMMIT =>
+              sram_addr_r <= write_addr_stage;
+              sram_dq_out <= write_data_stage;
+              sram_dq_oe  <= '1';
+              sram_we_n_r <= '0';
+              write_state <= WRITE_ISSUE;
+
+              if render_x = WIDTH - 1 then
+                render_x <= 0;
+                if render_y = HEIGHT - 1 then
+                  render_y <= 0;
+                  render_done <= '1';
+                else
+                  render_y <= render_y + 1;
+                end if;
+              else
+                render_x <= render_x + 1;
+              end if;
+          end case;
+
+        elsif (display_active_s2 = '0') or (not in_bounds) or (front_valid = '0') then
           disp_r <= (others => '0');
           disp_g <= (others => '0');
           disp_b <= (others => '0');
         end if;
-
-      elsif render_done = '0' then
-        -- Use remaining bandwidth for back-buffer writes.
-        write_addr := back_base + render_offset(render_x, render_y);
-        sram_addr_r <= write_addr;
-        sram_dq_out <= rgb888_to_565(render_red, render_green, render_blue);
-        sram_dq_oe  <= '1';
-        sram_we_n_r <= '0';
-
-        if render_x = WIDTH - 1 then
-          render_x <= 0;
-          if render_y = HEIGHT - 1 then
-            render_y <= 0;
-            render_done <= '1';
-          else
-            render_y <= render_y + 1;
-          end if;
-        else
-          render_x <= render_x + 1;
-        end if;
-      elsif (display_active_s2 = '0') or (not in_bounds) or (front_valid = '0') then
-        disp_r <= (others => '0');
-        disp_g <= (others => '0');
-        disp_b <= (others => '0');
       end if;
-      display_prev <= display_active_s2;
     end if;
   end process;
 

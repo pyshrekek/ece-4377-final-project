@@ -117,13 +117,18 @@ ARCHITECTURE structural OF DE2_115_TOP IS
 	 
      COMPONENT GRAPHICS_LAYER
         PORT (
+            clk_50                : IN  STD_LOGIC;
             pixel_row, pixel_column : IN  STD_LOGIC_VECTOR(9 DOWNTO 0);
             show_sphere, show_cube  : IN  STD_LOGIC;
+            cycle_cube_color        : IN  STD_LOGIC;
+            cycle_sphere_color      : IN  STD_LOGIC;
+            render_req              : IN  STD_LOGIC;
             x_offset                : IN  INTEGER RANGE -320 TO 320;
             y_offset                : IN  INTEGER RANGE -240 TO 240;
             zoom_level              : IN  INTEGER RANGE 0 TO 4;
-            Red, Green, Blue        : OUT STD_LOGIC_VECTOR(7 DOWNTO 0)
-        );
+            render_valid            : OUT STD_LOGIC;
+            Red, Green, Blue        : OUT STD_LOGIC_VECTOR(7 DOWNTO 0);
+            Vert_sync               : IN  STD_LOGIC);
     END COMPONENT;
 
     COMPONENT FRAMEBUFFER_SRAM
@@ -135,6 +140,8 @@ ARCHITECTURE structural OF DE2_115_TOP IS
             display_col    : IN  STD_LOGIC_VECTOR(9 DOWNTO 0);
             render_row     : OUT STD_LOGIC_VECTOR(9 DOWNTO 0);
             render_col     : OUT STD_LOGIC_VECTOR(9 DOWNTO 0);
+            render_req     : OUT STD_LOGIC;
+            render_valid   : IN  STD_LOGIC;
             render_red     : IN  STD_LOGIC_VECTOR(7 DOWNTO 0);
             render_green   : IN  STD_LOGIC_VECTOR(7 DOWNTO 0);
             render_blue    : IN  STD_LOGIC_VECTOR(7 DOWNTO 0);
@@ -163,12 +170,14 @@ ARCHITECTURE structural OF DE2_115_TOP IS
             zoom_level  : OUT INTEGER RANGE 0 TO 4);
     END COMPONENT;
 
-    SIGNAL red_int         : STD_LOGIC_VECTOR(7 DOWNTO 0);  -- VGA input from framebuffer
-    SIGNAL green_int       : STD_LOGIC_VECTOR(7 DOWNTO 0);  -- VGA input from framebuffer
-    SIGNAL blue_int        : STD_LOGIC_VECTOR(7 DOWNTO 0);  -- VGA input from framebuffer
-    SIGNAL render_red_int  : STD_LOGIC_VECTOR(7 DOWNTO 0);  -- Renderer output to back buffer
+    SIGNAL red_int         : STD_LOGIC_VECTOR(7 DOWNTO 0); -- VGA input from framebuffer
+    SIGNAL green_int       : STD_LOGIC_VECTOR(7 DOWNTO 0); -- VGA input from framebuffer
+    SIGNAL blue_int        : STD_LOGIC_VECTOR(7 DOWNTO 0); -- VGA input from framebuffer
+    SIGNAL render_red_int  : STD_LOGIC_VECTOR(7 DOWNTO 0); -- Renderer output to back buffer
     SIGNAL render_green_int: STD_LOGIC_VECTOR(7 DOWNTO 0);
     SIGNAL render_blue_int : STD_LOGIC_VECTOR(7 DOWNTO 0);
+    SIGNAL render_req_int  : STD_LOGIC;
+    SIGNAL render_valid_int: STD_LOGIC;
     SIGNAL vga_r_int       : STD_LOGIC_VECTOR(7 DOWNTO 0);
     SIGNAL vga_g_int       : STD_LOGIC_VECTOR(7 DOWNTO 0);
     SIGNAL vga_b_int       : STD_LOGIC_VECTOR(7 DOWNTO 0);
@@ -185,6 +194,7 @@ ARCHITECTURE structural OF DE2_115_TOP IS
     -- SW(0): show_sphere  SW(1): show_cube  (unchanged)
     -- KEY(0-3): move right/left/down/up
     -- SW(2): zoom in  SW(3): zoom out
+    -- SW(4): cube RGB color cycle  SW(5): sphere RGB color cycle
     SIGNAL x_offset_int    : INTEGER RANGE -320 TO 320 := 0;
     SIGNAL y_offset_int    : INTEGER RANGE -240 TO 240 := 0;
     SIGNAL zoom_level_int  : INTEGER RANGE 0 TO 4      := 2;
@@ -238,6 +248,8 @@ BEGIN
         display_col    => pixel_column_int,
         render_row     => render_row_int,
         render_col     => render_col_int,
+        render_req     => render_req_int,
+        render_valid   => render_valid_int,
         render_red     => render_red_int,
         render_green   => render_green_int,
         render_blue    => render_blue_int,
@@ -254,16 +266,22 @@ BEGIN
     );
 
     U2 : GRAPHICS_LAYER PORT MAP (
+        clk_50       => CLOCK_50,
         pixel_row    => render_row_int,
         pixel_column => render_col_int,
         show_sphere  => SW(0),
         show_cube    => SW(1),
+        cycle_cube_color   => SW(4),
+        cycle_sphere_color => SW(5),
+        render_req   => render_req_int,
         x_offset     => x_offset_int,
         y_offset     => y_offset_int,
         zoom_level   => zoom_level_int,
+        render_valid => render_valid_int,
         Red          => render_red_int,
         Green        => render_green_int,
-        Blue         => render_blue_int
+        Blue         => render_blue_int,
+        Vert_sync    => vert_sync_int
     );
 
 END structural;
