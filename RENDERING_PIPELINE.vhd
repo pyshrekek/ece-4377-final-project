@@ -46,6 +46,12 @@ PACKAGE RENDERING_PIPELINE IS
         normal_x_q8, normal_y_q8, normal_z_q8 : INTEGER;
         light : light_t
     ) RETURN INTEGER;
+    FUNCTION render_lit_triangle_pixel(
+        x, y : INTEGER;
+        tri : triangle_t;
+        base_color : color_t;
+        light : light_t
+    ) RETURN color_t;
 
     FUNCTION render_lit_cube_pixel(
         x, y : INTEGER;
@@ -83,6 +89,11 @@ PACKAGE BODY RENDERING_PIPELINE IS
     FUNCTION to_slv8(v : INTEGER) RETURN STD_LOGIC_VECTOR IS
     BEGIN
         RETURN STD_LOGIC_VECTOR(to_unsigned(clamp_u8(v), 8));
+    END FUNCTION;
+
+    FUNCTION is_transparent(c : color_t) RETURN BOOLEAN IS
+    BEGIN
+        RETURN (c.r = x"00") AND (c.g = x"00") AND (c.b = x"00");
     END FUNCTION;
 
     FUNCTION scale_color(base_color : color_t; shade_q8 : INTEGER) RETURN color_t IS
@@ -180,13 +191,29 @@ PACKAGE BODY RENDERING_PIPELINE IS
         RETURN is_point_in_triangle(px, py, x1, y1, x2, y2, x3, y3);
     END FUNCTION;
 
-    FUNCTION cube_shade_q8(
-        px, py : INTEGER;
+    FUNCTION render_lit_triangle_pixel(
+        x, y : INTEGER;
+        tri : triangle_t;
+        base_color : color_t;
+        light : light_t
+    ) RETURN color_t IS
+        VARIABLE shade_q8 : INTEGER;
+    BEGIN
+        IF point_in_triangle_fast(x, y, tri.x1, tri.y1, tri.x2, tri.y2, tri.x3, tri.y3) THEN
+            shade_q8 := shade_from_normal_q8(tri.normal_x_q8, tri.normal_y_q8, tri.normal_z_q8, light);
+            RETURN scale_color(base_color, shade_q8);
+        END IF;
+        RETURN TRANSPARENT;
+    END FUNCTION;
+
+    FUNCTION render_lit_cube_pixel(
+        x, y : INTEGER;
         cube : cube_t;
         light : light_t
-    ) RETURN INTEGER IS
+    ) RETURN color_t IS
         VARIABLE local_px : INTEGER;
         VARIABLE local_py : INTEGER;
+        VARIABLE pixel_color : color_t;
         CONSTANT half_side : INTEGER := cube.side_length / 2;
         CONSTANT depth_x : INTEGER := cube.side_length / 3;
         CONSTANT depth_y : INTEGER := -cube.side_length / 4;
@@ -218,45 +245,25 @@ PACKAGE BODY RENDERING_PIPELINE IS
             5 => (x1 => f0_x, y1 => f0_y, x2 => b1_x, y2 => b1_y, x3 => b0_x, y3 => b0_y, normal_x_q8 =>   0, normal_y_q8 => 256, normal_z_q8 =>   0)
         );
     BEGIN
-        local_px := cube.center_x + inv_scale_delta_q8(px - cube.center_x, cube.scale_x_q8);
-        local_py := cube.center_y + inv_scale_delta_q8(py - cube.center_y, cube.scale_y_q8);
+        -- Evaluate triangle coverage in cube local-space so scaling remains stable.
+        local_px := cube.center_x + inv_scale_delta_q8(x - cube.center_x, cube.scale_x_q8);
+        local_py := cube.center_y + inv_scale_delta_q8(y - cube.center_y, cube.scale_y_q8);
 
         FOR tri_idx IN visible_face_triangles'RANGE LOOP
-            IF point_in_triangle_fast(
-                local_px, local_py,
-                visible_face_triangles(tri_idx).x1,
-                visible_face_triangles(tri_idx).y1,
-                visible_face_triangles(tri_idx).x2,
-                visible_face_triangles(tri_idx).y2,
-                visible_face_triangles(tri_idx).x3,
-                visible_face_triangles(tri_idx).y3
-            ) THEN
-                RETURN shade_from_normal_q8(
-                    visible_face_triangles(tri_idx).normal_x_q8,
-                    visible_face_triangles(tri_idx).normal_y_q8,
-                    visible_face_triangles(tri_idx).normal_z_q8,
-                    light
-                );
+            pixel_color := render_lit_triangle_pixel(
+                local_px,
+                local_py,
+                visible_face_triangles(tri_idx),
+                cube.color,
+                light
+            );
+            IF NOT is_transparent(pixel_color) THEN
+                RETURN pixel_color;
             END IF;
         END LOOP;
 
         -- Hidden faces (back/left/bottom) are intentionally not classified.
-        RETURN -1;
-    END FUNCTION;
-
-    FUNCTION render_lit_cube_pixel(
-        x, y : INTEGER;
-        cube : cube_t;
-        light : light_t
-    ) RETURN color_t IS
-        VARIABLE shade_q8 : INTEGER;
-    BEGIN
-        shade_q8 := cube_shade_q8(x, y, cube, light);
-        IF shade_q8 < 0 THEN
-            RETURN TRANSPARENT;
-        END IF;
-
-        RETURN scale_color(cube.color, shade_q8);
+        RETURN TRANSPARENT;
     END FUNCTION;
 
 END PACKAGE BODY RENDERING_PIPELINE;
