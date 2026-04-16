@@ -65,15 +65,18 @@ PACKAGE BODY RENDERING_PIPELINE IS
         VARIABLE base_r : INTEGER;
         VARIABLE base_g : INTEGER;
         VARIABLE base_b : INTEGER;
+        VARIABLE shade  : INTEGER;
     BEGIN
         base_r := to_integer(unsigned(base_color.r));
         base_g := to_integer(unsigned(base_color.g));
         base_b := to_integer(unsigned(base_color.b));
+        shade := clamp_u8(shade_q8);
 
         RETURN (
-            r => to_slv8((base_r * shade_q8) / 255),
-            g => to_slv8((base_g * shade_q8) / 255),
-            b => to_slv8((base_b * shade_q8) / 255)
+            -- Match SPHERE_RENDERING scale behavior for consistent shading.
+            r => to_slv8((base_r * shade + 128) / 256),
+            g => to_slv8((base_g * shade + 128) / 256),
+            b => to_slv8((base_b * shade + 128) / 256)
         );
     END FUNCTION;
 

@@ -12,7 +12,6 @@ library ieee;
   use ieee.std_logic_1164.all;
   use ieee.numeric_std.all;
   use work.types.all;
-  use work.transforms.all;
   use work.graphics_test_utils.all;
   use work.rendering_pipeline.all;
   use work.sphere_rendering.all;
@@ -25,8 +24,6 @@ entity graphics_layer is
     vert_sync    : in    std_logic;
     show_sphere  : in    std_logic;
     show_cube    : in    std_logic;
-    rotate_left  : in    std_logic;
-    rotate_right : in    std_logic;
     -- Pan/zoom controls (driven by BUTTON_CONTROL)
     x_offset     : in    integer range -320 to 320;
     y_offset     : in    integer range -240 to 240;
@@ -45,11 +42,7 @@ architecture behavioral of graphics_layer is
   constant SCREEN_CX : integer := 320;
   constant SCREEN_CY : integer := 240;
 
-  -- 16/256 turn = 22.5 degrees.
-  constant ROT_STEP_ANGLE : angle_t := to_unsigned(16, 8);
   constant ROT_NONE_MAT   : mat4 := IDENTITY_MAT4;
-  constant ROT_LEFT_MAT   : mat4 := make_rotate_z(ROT_STEP_ANGLE);
-  constant ROT_RIGHT_MAT  : mat4 := make_rotate_z(to_unsigned(240, 8));
 
   function div_round_signed_256(num : integer) return integer is
   begin
@@ -130,7 +123,7 @@ begin
   -- Spheres are then composited with the same per-index priority.
   -- zoom_level and x/y_offset are applied before each draw call so
   -- the scene can be panned and zoomed at run-time via BUTTON_CONTROL.
-  render_proc : process (x, y, show_sphere, show_cube, rotate_left, rotate_right, x_offset, y_offset, zoom_level) is
+  render_proc : process (x, y, show_sphere, show_cube, x_offset, y_offset, zoom_level) is
 
     -- Scale factors derived from zoom_level:
     --   zoom_level 0 => 0.25x (scale_num=1, scale_den=4)
@@ -144,8 +137,6 @@ begin
     -- Temporaries for transformed object geometry
     variable scaled_cube   : cube_t;
     variable scaled_sphere : sphere_t;
-    variable active_rot_mat : mat4;
-
     variable color : color_t;
     variable hit   : color_t;
 
@@ -160,20 +151,11 @@ begin
       when others => scale_num := 1; scale_den := 1;   -- zoom_level 2: normal
     end case;
 
-    if (rotate_left = '1') and (rotate_right = '0') then
-      active_rot_mat := ROT_LEFT_MAT;
-    elsif (rotate_right = '1') and (rotate_left = '0') then
-      active_rot_mat := ROT_RIGHT_MAT;
-    else
-      active_rot_mat := ROT_NONE_MAT;
-    end if;
-
     color := BACKGROUND_COLOR;
 
     if show_cube = '1' then
       for i in SCENE'reverse_range loop
-        -- Apply matrix transform first, then zoom/pan in screen space.
-        scaled_cube := transform_cube(SCENE(i), active_rot_mat, scale_num, scale_den, x_offset, y_offset);
+        scaled_cube := transform_cube(SCENE(i), ROT_NONE_MAT, scale_num, scale_den, x_offset, y_offset);
 
         hit := render_lit_cube_pixel(x, y, scaled_cube, SCENE_LIGHT);
 
@@ -186,7 +168,7 @@ begin
 
     if show_sphere = '1' then
       for i in SCENE_SPHERES'reverse_range loop
-        scaled_sphere := transform_sphere(SCENE_SPHERES(i), active_rot_mat, scale_num, scale_den, x_offset, y_offset);
+        scaled_sphere := transform_sphere(SCENE_SPHERES(i), ROT_NONE_MAT, scale_num, scale_den, x_offset, y_offset);
 
         if SPHERE_WIREFRAME_MODE then
           hit := render_wireframe_sphere_pixel(x, y, scaled_sphere, 2);

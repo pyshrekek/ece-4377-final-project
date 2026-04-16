@@ -119,7 +119,6 @@ ARCHITECTURE structural OF DE2_115_TOP IS
         PORT (
             pixel_row, pixel_column : IN  STD_LOGIC_VECTOR(9 DOWNTO 0);
             show_sphere, show_cube  : IN  STD_LOGIC;
-            rotate_left, rotate_right : IN STD_LOGIC;
             x_offset                : IN  INTEGER RANGE -320 TO 320;
             y_offset                : IN  INTEGER RANGE -240 TO 240;
             zoom_level              : IN  INTEGER RANGE 0 TO 4;
@@ -204,8 +203,6 @@ BEGIN
         pixel_column => pixel_column_int,
         show_sphere  => SW(0),
         show_cube    => SW(1),
-        rotate_left  => SW(17),
-        rotate_right => SW(16),
         x_offset     => x_offset_int,
         y_offset     => y_offset_int,
         zoom_level   => zoom_level_int,
