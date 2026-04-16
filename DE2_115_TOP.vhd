@@ -241,7 +241,7 @@ BEGIN
     );
 
     U4 : FRAMEBUFFER_SRAM PORT MAP (
-        clk_50         => pixel_clock_int,
+        clk_50         => CLOCK_50,
         vert_sync      => vert_sync_int,
         display_active => video_on_int,
         display_row    => pixel_row_int,
