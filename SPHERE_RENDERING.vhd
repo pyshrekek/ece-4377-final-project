@@ -24,6 +24,23 @@ package sphere_rendering is
   end record;
   type sphere_scene_t is array (natural range <>) of sphere_t;
 
+  type sphere_sample_t is record
+    hit   : std_logic;
+    color : color_t;
+  end record;
+
+  function sample_lit_sphere_pixel(
+    x, y   : integer;
+    sphere : sphere_t;
+    light  : light_t
+  ) return sphere_sample_t;
+
+  function sample_wireframe_sphere_pixel(
+    x, y      : integer;
+    sphere    : sphere_t;
+    thickness : integer
+  ) return sphere_sample_t;
+
   function render_lit_sphere_pixel(
     x, y   : integer;
     sphere : sphere_t;
@@ -48,11 +65,11 @@ package body sphere_rendering is
     return v;
   end function;
 
-  function render_lit_sphere_pixel(
+  function sample_lit_sphere_pixel(
     x, y   : integer;
     sphere : sphere_t;
     light  : light_t
-  ) return color_t is
+  ) return sphere_sample_t is
     variable dx        : integer;
     variable dy        : integer;
     variable dx_local  : integer;
@@ -68,9 +85,13 @@ package body sphere_rendering is
     variable dot_num   : integer;
     variable dot_q8    : integer;
     variable shade     : integer;
+    variable sample    : sphere_sample_t;
   begin
+    sample.hit := '0';
+    sample.color := TRANSPARENT;
+
     if sphere.radius <= 0 then
-      return TRANSPARENT;
+      return sample;
     end if;
 
     dx := x - sphere.center_x;
@@ -81,7 +102,7 @@ package body sphere_rendering is
     dist2 := dx_local * dx_local + dy_local * dy_local;
 
     if dist2 > radius2 then
-      return TRANSPARENT;
+      return sample;
     end if;
 
     -- Timing-friendly radial approximation:
@@ -118,14 +139,16 @@ package body sphere_rendering is
     end if;
 
     shade := shade_from_dot_q8(dot_q8, light);
-    return scale_color(sphere.color, shade);
+    sample.hit := '1';
+    sample.color := scale_color(sphere.color, shade);
+    return sample;
   end function;
 
-  function render_wireframe_sphere_pixel(
+  function sample_wireframe_sphere_pixel(
     x, y      : integer;
     sphere    : sphere_t;
     thickness : integer
-  ) return color_t is
+  ) return sphere_sample_t is
     variable dx        : integer;
     variable dy        : integer;
     variable dx_local  : integer;
@@ -135,9 +158,13 @@ package body sphere_rendering is
     variable ring_dist : integer;
     variable ring_span : integer;
     variable t         : integer;
+    variable sample    : sphere_sample_t;
   begin
+    sample.hit := '0';
+    sample.color := TRANSPARENT;
+
     if sphere.radius <= 0 then
-      return TRANSPARENT;
+      return sample;
     end if;
 
     dx := x - sphere.center_x;
@@ -159,10 +186,33 @@ package body sphere_rendering is
     ring_span := 2 * sphere.radius * t;
 
     if ring_dist <= ring_span then
-      return sphere.color;
+      sample.hit := '1';
+      sample.color := sphere.color;
     end if;
 
-    return TRANSPARENT;
+    return sample;
+  end function;
+
+  function render_lit_sphere_pixel(
+    x, y   : integer;
+    sphere : sphere_t;
+    light  : light_t
+  ) return color_t is
+    variable sample : sphere_sample_t;
+  begin
+    sample := sample_lit_sphere_pixel(x, y, sphere, light);
+    return sample.color;
+  end function;
+
+  function render_wireframe_sphere_pixel(
+    x, y      : integer;
+    sphere    : sphere_t;
+    thickness : integer
+  ) return color_t is
+    variable sample : sphere_sample_t;
+  begin
+    sample := sample_wireframe_sphere_pixel(x, y, sphere, thickness);
+    return sample.color;
   end function;
 
 end package body sphere_rendering;

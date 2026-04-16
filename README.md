@@ -2,6 +2,8 @@
 
 Graphics engine written in VHDL. Displays an image on VGA monitor via the DE2-115's VGA output.
 
+Current top-level wiring renders into an external-SRAM double framebuffer (`FRAMEBUFFER_SRAM.vhd`) and scans out the front buffer to VGA.
+
 ## Runtime controls (DE2-115)
 
 - `SW(0)`: show/hide spheres
