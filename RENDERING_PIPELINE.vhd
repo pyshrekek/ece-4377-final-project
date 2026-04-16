@@ -52,6 +52,12 @@ PACKAGE RENDERING_PIPELINE IS
         base_color : color_t;
         light : light_t
     ) RETURN color_t;
+    FUNCTION render_lit_triangle_scene_pixel(
+        x, y : INTEGER;
+        triangles : triangle_scene_t;
+        base_color : color_t;
+        light : light_t
+    ) RETURN color_t;
 
     FUNCTION render_lit_cube_pixel(
         x, y : INTEGER;
@@ -206,6 +212,23 @@ PACKAGE BODY RENDERING_PIPELINE IS
         RETURN TRANSPARENT;
     END FUNCTION;
 
+    FUNCTION render_lit_triangle_scene_pixel(
+        x, y : INTEGER;
+        triangles : triangle_scene_t;
+        base_color : color_t;
+        light : light_t
+    ) RETURN color_t IS
+        VARIABLE pixel_color : color_t;
+    BEGIN
+        FOR tri_idx IN triangles'RANGE LOOP
+            pixel_color := render_lit_triangle_pixel(x, y, triangles(tri_idx), base_color, light);
+            IF NOT is_transparent(pixel_color) THEN
+                RETURN pixel_color;
+            END IF;
+        END LOOP;
+        RETURN TRANSPARENT;
+    END FUNCTION;
+
     FUNCTION render_lit_cube_pixel(
         x, y : INTEGER;
         cube : cube_t;
@@ -249,21 +272,14 @@ PACKAGE BODY RENDERING_PIPELINE IS
         local_px := cube.center_x + inv_scale_delta_q8(x - cube.center_x, cube.scale_x_q8);
         local_py := cube.center_y + inv_scale_delta_q8(y - cube.center_y, cube.scale_y_q8);
 
-        FOR tri_idx IN visible_face_triangles'RANGE LOOP
-            pixel_color := render_lit_triangle_pixel(
-                local_px,
-                local_py,
-                visible_face_triangles(tri_idx),
-                cube.color,
-                light
-            );
-            IF NOT is_transparent(pixel_color) THEN
-                RETURN pixel_color;
-            END IF;
-        END LOOP;
-
-        -- Hidden faces (back/left/bottom) are intentionally not classified.
-        RETURN TRANSPARENT;
+        pixel_color := render_lit_triangle_scene_pixel(
+            local_px,
+            local_py,
+            visible_face_triangles,
+            cube.color,
+            light
+        );
+        RETURN pixel_color;
     END FUNCTION;
 
 END PACKAGE BODY RENDERING_PIPELINE;

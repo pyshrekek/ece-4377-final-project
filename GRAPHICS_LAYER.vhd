@@ -172,6 +172,8 @@ begin
 
         if SPHERE_WIREFRAME_MODE then
           hit := render_wireframe_sphere_pixel(x, y, scaled_sphere, 2);
+        elsif SPHERE_TRIANGLE_MODE then
+          hit := render_lit_sphere_triangle_pixel(x, y, scaled_sphere, SCENE_LIGHT, SPHERE_TRIANGLE_COUNT);
         else
           hit := render_lit_sphere_pixel(x, y, scaled_sphere, SCENE_LIGHT);
         end if;
