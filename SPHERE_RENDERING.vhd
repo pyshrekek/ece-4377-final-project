@@ -30,13 +30,6 @@ package sphere_rendering is
     light  : light_t
   ) return color_t;
 
-  function render_lit_sphere_triangle_pixel(
-    x, y   : integer;
-    sphere : sphere_t;
-    light  : light_t;
-    triangle_count : integer
-  ) return color_t;
-
   function render_wireframe_sphere_pixel(
     x, y      : integer;
     sphere    : sphere_t;
@@ -46,25 +39,6 @@ package sphere_rendering is
 end package sphere_rendering;
 
 package body sphere_rendering is
-
-  function div_round_signed(num, den : integer) return integer is
-  begin
-    if den = 0 then
-      return 0;
-    end if;
-
-    if num >= 0 then
-      return (num + (den / 2)) / den;
-    else
-      return -(((-num) + (den / 2)) / den);
-    end if;
-  end function;
-
-  function scale_local_axis(local_q8, radius_px, scale_q8 : integer) return integer is
-  begin
-    -- local_q8 (Q8.8 unit sphere) * radius_px * scale_q8 (Q8.8) -> pixels.
-    return div_round_signed(local_q8 * radius_px * scale_q8, 65536);
-  end function;
 
   function abs_int(v : integer) return integer is
   begin
@@ -133,81 +107,6 @@ package body sphere_rendering is
 
     shade := shade_from_dot_q8(dot_q8, light);
     return scale_color(sphere.color, shade);
-  end function;
-
-  function render_lit_sphere_triangle_pixel(
-    x, y   : integer;
-    sphere : sphere_t;
-    light  : light_t;
-    triangle_count : integer
-  ) return color_t is
-    constant MAX_SPHERE_TRIANGLES : integer := 16;
-    constant NORM_Z_Q8 : integer := 181; -- keeps front-hemisphere lighting stable
-    type ring_arr_t is array (0 to MAX_SPHERE_TRIANGLES - 1) of integer;
-    constant RING_X_Q8 : ring_arr_t := (
-       256,  236,  181,   98,    0,  -98, -181, -236,
-      -256, -236, -181,  -98,    0,   98,  181,  236
-    );
-    constant RING_Y_Q8 : ring_arr_t := (
-         0,   98,  181,  236,  256,  236,  181,   98,
-         0,  -98, -181, -236, -256, -236, -181,  -98
-    );
-    variable tri_count : integer;
-    variable idx0      : integer;
-    variable idx1      : integer;
-    variable avg_x_q8  : integer;
-    variable avg_y_q8  : integer;
-    variable tri       : triangle_t;
-    variable pixel_color : color_t;
-  begin
-    if sphere.radius <= 0 then
-      return TRANSPARENT;
-    end if;
-
-    tri_count := triangle_count;
-    if tri_count < 1 then
-      tri_count := 1;
-    elsif tri_count > MAX_SPHERE_TRIANGLES then
-      tri_count := MAX_SPHERE_TRIANGLES;
-    end if;
-
-    for i in 0 to MAX_SPHERE_TRIANGLES - 1 loop
-      if i < tri_count then
-        -- Spread samples around the full ring so any triangle_count forms
-        -- a closed front-hemisphere fan.
-        idx0 := (i * MAX_SPHERE_TRIANGLES) / tri_count;
-        idx1 := ((i + 1) * MAX_SPHERE_TRIANGLES) / tri_count;
-        if idx1 >= MAX_SPHERE_TRIANGLES then
-          idx1 := idx1 - MAX_SPHERE_TRIANGLES;
-        end if;
-        if idx1 = idx0 then
-          idx1 := idx0 + 1;
-          if idx1 >= MAX_SPHERE_TRIANGLES then
-            idx1 := 0;
-          end if;
-        end if;
-
-        tri.x1 := sphere.center_x;
-        tri.y1 := sphere.center_y;
-        tri.x2 := sphere.center_x + scale_local_axis(RING_X_Q8(idx0), sphere.radius, sphere.scale_x_q8);
-        tri.y2 := sphere.center_y + scale_local_axis(RING_Y_Q8(idx0), sphere.radius, sphere.scale_y_q8);
-        tri.x3 := sphere.center_x + scale_local_axis(RING_X_Q8(idx1), sphere.radius, sphere.scale_x_q8);
-        tri.y3 := sphere.center_y + scale_local_axis(RING_Y_Q8(idx1), sphere.radius, sphere.scale_y_q8);
-
-        avg_x_q8 := (RING_X_Q8(idx0) + RING_X_Q8(idx1)) / 2;
-        avg_y_q8 := (RING_Y_Q8(idx0) + RING_Y_Q8(idx1)) / 2;
-        tri.normal_x_q8 := avg_x_q8;
-        tri.normal_y_q8 := avg_y_q8;
-        tri.normal_z_q8 := NORM_Z_Q8;
-
-        pixel_color := render_lit_triangle_pixel(x, y, tri, sphere.color, light);
-        if (pixel_color.r /= x"00") or (pixel_color.g /= x"00") or (pixel_color.b /= x"00") then
-          return pixel_color;
-        end if;
-      end if;
-    end loop;
-
-    return TRANSPARENT;
   end function;
 
   function render_wireframe_sphere_pixel(

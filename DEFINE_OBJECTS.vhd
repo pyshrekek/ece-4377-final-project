@@ -61,12 +61,6 @@ package define_objects is
   --   true  => draw spheres as wireframe rings
   --   false => draw fully lit/shaded spheres
   constant sphere_wireframe_mode : boolean := false;
-  -- Sphere renderer switch:
-  --   true  => low-poly triangle mesh path (shared triangle renderer)
-  --   false => legacy implicit sphere raster path
-  constant sphere_triangle_mode : boolean := true;
-  -- Triangle count for sphere_triangle_mode. Clamped to [1..16] in renderer.
-  constant sphere_triangle_count : integer := 16;
 
   -- To add a sphere: append a SCENE_SPHERES entry.
   -- To hide one:     set radius => 0  (zero-radius = invisible).
