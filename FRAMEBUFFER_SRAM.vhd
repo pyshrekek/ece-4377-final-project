@@ -61,6 +61,14 @@ architecture rtl of framebuffer_sram is
   signal render_y         : integer range 0 to HEIGHT - 1 := 0;
   signal render_done      : std_logic := '0';
 
+  signal vert_sync_s1     : std_logic := '0';
+  signal vert_sync_s2     : std_logic := '0';
+  signal display_active_s1: std_logic := '0';
+  signal display_active_s2: std_logic := '0';
+  signal display_row_s1   : std_logic_vector(9 downto 0) := (others => '0');
+  signal display_row_s2   : std_logic_vector(9 downto 0) := (others => '0');
+  signal display_col_s1   : std_logic_vector(9 downto 0) := (others => '0');
+  signal display_col_s2   : std_logic_vector(9 downto 0) := (others => '0');
   signal vsync_prev       : std_logic := '0';
   signal read_pending     : std_logic := '0';
   signal display_prev     : std_logic := '0';
@@ -132,16 +140,28 @@ begin
     variable disp_col_u : unsigned(9 downto 0);
     variable in_bounds  : boolean;
     variable need_read  : boolean;
+    variable stable_sample : boolean;
   begin
     if rising_edge(clk_50) then
+      -- Synchronize VGA-domain control/coordinate inputs into clk_50 domain.
+      vert_sync_s1 <= vert_sync;
+      vert_sync_s2 <= vert_sync_s1;
+      display_active_s1 <= display_active;
+      display_active_s2 <= display_active_s1;
+      display_row_s1 <= display_row;
+      display_row_s2 <= display_row_s1;
+      display_col_s1 <= display_col;
+      display_col_s2 <= display_col_s1;
+
       frame_swap_tick_r <= '0';
-      disp_row_u := unsigned(display_row);
-      disp_col_u := unsigned(display_col);
+      disp_row_u := unsigned(display_row_s2);
+      disp_col_u := unsigned(display_col_s2);
       in_bounds := (disp_col_u <= MAX_COL_U10) and (disp_row_u <= MAX_ROW_U10);
       need_read := false;
+      stable_sample := (display_row_s1 = display_row_s2) and (display_col_s1 = display_col_s2);
 
       -- Swap only at frame boundary after a complete back-buffer render.
-      if vert_sync = '1' and vsync_prev = '0' then
+      if vert_sync_s2 = '1' and vsync_prev = '0' then
         if render_done = '1' then
           front_base  <= back_base;
           back_base   <= front_base;
@@ -152,7 +172,7 @@ begin
           frame_swap_tick_r <= '1';
         end if;
       end if;
-      vsync_prev <= vert_sync;
+      vsync_prev <= vert_sync_s2;
 
       -- Defaults: no SRAM operation.
       sram_dq_oe  <= '0';
@@ -169,7 +189,7 @@ begin
       end if;
 
       -- Request a new display read whenever scan coordinate changes.
-      if (display_active = '1') and (front_valid = '1') and in_bounds then
+      if (display_active_s2 = '1') and (display_active_s1 = display_active_s2) and stable_sample and (front_valid = '1') and in_bounds then
         if (display_prev = '0') or (disp_col_u /= last_disp_col) or (disp_row_u /= last_disp_row) then
           need_read := true;
         end if;
@@ -208,12 +228,12 @@ begin
         else
           render_x <= render_x + 1;
         end if;
-      elsif (display_active = '0') or (not in_bounds) or (front_valid = '0') then
+      elsif (display_active_s2 = '0') or (not in_bounds) or (front_valid = '0') then
         disp_r <= (others => '0');
         disp_g <= (others => '0');
         disp_b <= (others => '0');
       end if;
-      display_prev <= display_active;
+      display_prev <= display_active_s2;
     end if;
   end process;
 

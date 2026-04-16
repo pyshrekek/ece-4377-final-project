@@ -28,8 +28,9 @@ entity graphics_layer is
     show_cube    : in    std_logic;
     cycle_cube_color   : in    std_logic;
     cycle_sphere_color : in    std_logic;
-    rotate_cube_cw     : in    std_logic;
-    rotate_cube_ccw    : in    std_logic;
+    rotate_cube_x      : in    std_logic;
+    rotate_cube_y      : in    std_logic;
+    rotate_cube_z      : in    std_logic;
     -- Pan/zoom controls (driven by BUTTON_CONTROL)
     x_offset     : in    integer range -320 to 320;
     y_offset     : in    integer range -240 to 240;
@@ -55,7 +56,9 @@ architecture behavioral of graphics_layer is
   constant ROT_NONE_MAT   : mat4 := IDENTITY_MAT4;
   signal cube_color_phase   : integer range 0 to RGB_CYCLE_MAX := 0;
   signal sphere_color_phase : integer range 0 to RGB_CYCLE_MAX := 0;
-  signal cube_rotation_phase : integer range 0 to ANGLE_CYCLE_MAX := 0;
+  signal cube_rotation_x_phase : integer range 0 to ANGLE_CYCLE_MAX := 0;
+  signal cube_rotation_y_phase : integer range 0 to ANGLE_CYCLE_MAX := 0;
+  signal cube_rotation_z_phase : integer range 0 to ANGLE_CYCLE_MAX := 0;
   signal cube_cycle_color    : color_t := (r => x"FF", g => x"00", b => x"00");
   signal sphere_cycle_color  : color_t := (r => x"FF", g => x"00", b => x"00");
 
@@ -101,14 +104,6 @@ architecture behavioral of graphics_layer is
       return p - (ANGLE_CYCLE_MAX + 1);
     end if;
     return p;
-  end function;
-
-  function prev_angle_phase(phase : integer) return integer is
-  begin
-    if phase < ANGLE_CYCLE_STEP then
-      return phase + (ANGLE_CYCLE_MAX + 1) - ANGLE_CYCLE_STEP;
-    end if;
-    return phase - ANGLE_CYCLE_STEP;
   end function;
 
   function add_angle_phase(base_angle : angle_t; phase : integer) return angle_t is
@@ -234,10 +229,14 @@ begin
       cube_cycle_color <= rgb_cycle_color(next_cube_color_phase);
       sphere_cycle_color <= rgb_cycle_color(next_sphere_color_phase);
 
-      if rotate_cube_cw = '1' and rotate_cube_ccw = '0' then
-        cube_rotation_phase <= next_angle_phase(cube_rotation_phase);
-      elsif rotate_cube_ccw = '1' and rotate_cube_cw = '0' then
-        cube_rotation_phase <= prev_angle_phase(cube_rotation_phase);
+      if rotate_cube_x = '1' then
+        cube_rotation_x_phase <= next_angle_phase(cube_rotation_x_phase);
+      end if;
+      if rotate_cube_y = '1' then
+        cube_rotation_y_phase <= next_angle_phase(cube_rotation_y_phase);
+      end if;
+      if rotate_cube_z = '1' then
+        cube_rotation_z_phase <= next_angle_phase(cube_rotation_z_phase);
       end if;
     end if;
   end process color_cycle_proc;
@@ -250,7 +249,8 @@ begin
   -- the scene can be panned and zoomed at run-time via BUTTON_CONTROL.
   render_proc : process (
     x, y, show_sphere, show_cube, cycle_cube_color, cycle_sphere_color,
-    cube_cycle_color, sphere_cycle_color, cube_rotation_phase,
+    cube_cycle_color, sphere_cycle_color,
+    cube_rotation_x_phase, cube_rotation_y_phase, cube_rotation_z_phase,
     x_offset, y_offset, zoom_level
   ) is
 
@@ -285,7 +285,9 @@ begin
     if show_cube = '1' then
       for i in SCENE'reverse_range loop
         scaled_cube := transform_cube(SCENE(i), ROT_NONE_MAT, scale_num, scale_den, x_offset, y_offset);
-        scaled_cube.rotation_z := add_angle_phase(scaled_cube.rotation_z, cube_rotation_phase);
+        scaled_cube.rotation_x := add_angle_phase(scaled_cube.rotation_x, cube_rotation_x_phase);
+        scaled_cube.rotation_y := add_angle_phase(scaled_cube.rotation_y, cube_rotation_y_phase);
+        scaled_cube.rotation_z := add_angle_phase(scaled_cube.rotation_z, cube_rotation_z_phase);
         if cycle_cube_color = '1' then
           scaled_cube.color := cube_cycle_color;
         end if;

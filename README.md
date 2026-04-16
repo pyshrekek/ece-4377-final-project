@@ -10,8 +10,9 @@ Graphics engine written in VHDL. Displays an image on VGA monitor via the DE2-11
 - `SW(3)`: hold to zoom out
 - `SW(4)`: enable cube RGB color cycling
 - `SW(5)`: enable sphere RGB color cycling
-- `SW(16)`: continuously rotate cube clockwise
-- `SW(17)`: continuously rotate cube counterclockwise
+- `SW(15)`: continuously rotate cube around X axis
+- `SW(16)`: continuously rotate cube around Y axis
+- `SW(17)`: continuously rotate cube around Z axis
 - `KEY(0..3)`: pan right/left/down/up
 
 ## Framebuffer architecture
@@ -19,5 +20,6 @@ Graphics engine written in VHDL. Displays an image on VGA monitor via the DE2-11
 - The design now uses a 640x480 RGB565 **double framebuffer** in external SRAM.
 - VGA scans out from a front buffer while `GRAPHICS_LAYER` renders into a back buffer.
 - Front-buffer reads are prioritized as scan coordinates advance; remaining cycles are used for back-buffer writes.
+- VGA-domain scan control signals are synchronized into the SRAM arbiter clock domain before address generation to reduce mid-line static artifacts.
 - Buffers swap on `vert_sync` only after a full back-buffer render completes.
 - Animation phase updates are keyed off completed buffer swaps so one rendered frame uses one consistent scene state.

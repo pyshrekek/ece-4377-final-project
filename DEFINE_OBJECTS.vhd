@@ -10,7 +10,7 @@
 --   center_x, center_y  : screen-space centre (pixels)
 --   side_length          : full side length (pixels)
 --   scale_x_q8, scale_y_q8 : non-uniform scale in Q8.8 (256 = 1.0x)
---   rotation_z             : 8-bit angle (0..255 => 0..360 deg), about cube center
+--   rotation_x/y/z         : 8-bit angles (0..255 => 0..360 deg)
 --   color                : RGB 8-bit per channel
 --
 -- light_t fields (defined in RENDERING_PIPELINE):
@@ -58,6 +58,8 @@ package define_objects is
     0 => (
       center_x => 240, center_y => 240, side_length => 96,
       scale_x_q8 => 256, scale_y_q8 => 256,
+      rotation_x => to_unsigned(0, 8),
+      rotation_y => to_unsigned(0, 8),
       rotation_z => to_unsigned(0, 8),
       color => (r => x"D0", g => x"40", b => x"40")
     )
