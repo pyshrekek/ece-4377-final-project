@@ -98,35 +98,40 @@ PACKAGE BODY RENDERING_PIPELINE IS
         RETURN div_round_signed(delta_px * 256, s);
     END FUNCTION;
 
-    FUNCTION sign_of_cross(
-        x1, y1, x2, y2, px, py : INTEGER
-    ) RETURN INTEGER IS
-        VARIABLE cross : INTEGER;
+    FUNCTION min2(a, b : INTEGER) RETURN INTEGER IS
     BEGIN
-        cross := (x2 - x1) * (py - y1) - (y2 - y1) * (px - x1);
-        IF cross > 0 THEN
-            RETURN 1;
-        ELSIF cross < 0 THEN
-            RETURN -1;
+        IF a < b THEN
+            RETURN a;
         END IF;
-        RETURN 0;
+        RETURN b;
     END FUNCTION;
 
-    FUNCTION is_point_in_quad(
-        px, py : INTEGER;
-        x1, y1, x2, y2, x3, y3, x4, y4 : INTEGER
-    ) RETURN BOOLEAN IS
-        VARIABLE d1, d2, d3, d4 : INTEGER;
-        VARIABLE has_neg, has_pos : BOOLEAN;
+    FUNCTION max2(a, b : INTEGER) RETURN INTEGER IS
     BEGIN
-        d1 := sign_of_cross(x1, y1, x2, y2, px, py);
-        d2 := sign_of_cross(x2, y2, x3, y3, px, py);
-        d3 := sign_of_cross(x3, y3, x4, y4, px, py);
-        d4 := sign_of_cross(x4, y4, x1, y1, px, py);
+        IF a > b THEN
+            RETURN a;
+        END IF;
+        RETURN b;
+    END FUNCTION;
 
-        has_neg := (d1 < 0) OR (d2 < 0) OR (d3 < 0) OR (d4 < 0);
-        has_pos := (d1 > 0) OR (d2 > 0) OR (d3 > 0) OR (d4 > 0);
-        RETURN NOT (has_neg AND has_pos);
+    FUNCTION point_in_triangle_fast(
+        px, py : INTEGER;
+        x1, y1, x2, y2, x3, y3 : INTEGER
+    ) RETURN BOOLEAN IS
+        VARIABLE min_x : INTEGER;
+        VARIABLE max_x : INTEGER;
+        VARIABLE min_y : INTEGER;
+        VARIABLE max_y : INTEGER;
+    BEGIN
+        min_x := min2(min2(x1, x2), x3);
+        max_x := max2(max2(x1, x2), x3);
+        min_y := min2(min2(y1, y2), y3);
+        max_y := max2(max2(y1, y2), y3);
+
+        IF (px < min_x) OR (px > max_x) OR (py < min_y) OR (py > max_y) THEN
+            RETURN FALSE;
+        END IF;
+        RETURN is_point_in_triangle(px, py, x1, y1, x2, y2, x3, y3);
     END FUNCTION;
 
     FUNCTION cube_face_id(
@@ -167,13 +172,14 @@ PACKAGE BODY RENDERING_PIPELINE IS
             RETURN 1; -- front
         END IF;
 
-        -- Right and top faces are rendered as quads (not split triangles) to
-        -- avoid internal seam artifacts from face-diagonal ambiguity.
-        IF is_point_in_quad(local_px, local_py, f1_x, f1_y, f2_x, f2_y, b2_x, b2_y, b1_x, b1_y) THEN
+        -- Test side faces as explicit triangles (shared primitive path).
+        IF point_in_triangle_fast(local_px, local_py, f1_x, f1_y, f2_x, f2_y, b2_x, b2_y) OR
+           point_in_triangle_fast(local_px, local_py, f1_x, f1_y, b2_x, b2_y, b1_x, b1_y) THEN
             RETURN 2; -- right
         END IF;
 
-        IF is_point_in_quad(local_px, local_py, f0_x, f0_y, f1_x, f1_y, b1_x, b1_y, b0_x, b0_y) THEN
+        IF point_in_triangle_fast(local_px, local_py, f0_x, f0_y, f1_x, f1_y, b1_x, b1_y) OR
+           point_in_triangle_fast(local_px, local_py, f0_x, f0_y, b1_x, b1_y, b0_x, b0_y) THEN
             RETURN 3; -- top
         END IF;
 
