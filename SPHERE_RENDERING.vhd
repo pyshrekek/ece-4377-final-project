@@ -30,6 +30,11 @@ package sphere_rendering is
     light  : light_t
   ) return color_t;
 
+  function sphere_contains_pixel(
+    x, y   : integer;
+    sphere : sphere_t
+  ) return boolean;
+
   function render_wireframe_sphere_pixel(
     x, y      : integer;
     sphere    : sphere_t;
@@ -48,6 +53,26 @@ package body sphere_rendering is
     return v;
   end function;
 
+  function sphere_contains_pixel(
+    x, y   : integer;
+    sphere : sphere_t
+  ) return boolean is
+    variable dx_local : integer;
+    variable dy_local : integer;
+    variable radius2  : integer;
+    variable dist2    : integer;
+  begin
+    if sphere.radius <= 0 then
+      return false;
+    end if;
+
+    dx_local := inv_scale_delta_q8(x - sphere.center_x, sphere.scale_x_q8);
+    dy_local := inv_scale_delta_q8(y - sphere.center_y, sphere.scale_y_q8);
+    radius2 := sphere.radius * sphere.radius;
+    dist2 := dx_local * dx_local + dy_local * dy_local;
+    return dist2 <= radius2;
+  end function;
+
   function render_lit_sphere_pixel(
     x, y   : integer;
     sphere : sphere_t;
@@ -57,8 +82,7 @@ package body sphere_rendering is
     variable dy        : integer;
     variable dx_local  : integer;
     variable dy_local  : integer;
-    variable adx       : integer;
-    variable ady       : integer;
+    variable z_den     : integer;
     variable radius2   : integer;
     variable dist2     : integer;
     variable z_approx  : integer;
@@ -81,10 +105,34 @@ package body sphere_rendering is
       return TRANSPARENT;
     end if;
 
-    -- Fast hemisphere depth approximation (no sqrt/divide by variable).
-    adx := abs_int(dx_local);
-    ady := abs_int(dy_local);
-    z_approx := sphere.radius - ((adx + ady) / 2);
+    -- Radially-symmetric hemisphere depth approximation using dist2.
+    -- Use piecewise constant denominators (roughly 2*radius) to keep
+    -- timing predictable while reducing directional streaking artifacts.
+    if sphere.radius <= 24 then
+      z_den := 48;
+    elsif sphere.radius <= 32 then
+      z_den := 64;
+    elsif sphere.radius <= 40 then
+      z_den := 80;
+    elsif sphere.radius <= 48 then
+      z_den := 96;
+    elsif sphere.radius <= 56 then
+      z_den := 112;
+    elsif sphere.radius <= 64 then
+      z_den := 128;
+    elsif sphere.radius <= 80 then
+      z_den := 160;
+    elsif sphere.radius <= 96 then
+      z_den := 192;
+    elsif sphere.radius <= 128 then
+      z_den := 256;
+    elsif sphere.radius <= 160 then
+      z_den := 320;
+    else
+      z_den := 384;
+    end if;
+
+    z_approx := sphere.radius - ((dist2 + (z_den / 2)) / z_den);
     if z_approx < 0 then
       z_approx := 0;
     end if;

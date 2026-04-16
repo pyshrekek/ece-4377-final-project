@@ -64,6 +64,7 @@ architecture rtl of framebuffer_sram is
 
   signal vsync_prev       : std_logic := '0';
   signal read_pending     : std_logic := '0';
+  signal display_active_prev : std_logic := '0';
 
   signal sram_addr_r      : unsigned(19 downto 0) := (others => '0');
   signal sram_we_n_r      : std_logic := '1';
@@ -130,12 +131,14 @@ begin
     variable disp_row_u : unsigned(9 downto 0);
     variable disp_col_u : unsigned(9 downto 0);
     variable in_bounds  : boolean;
+    variable mode_changed : boolean;
   begin
     if rising_edge(clk_50) then
       frame_swap_tick_r <= '0';
       disp_row_u := unsigned(display_row);
       disp_col_u := unsigned(display_col);
       in_bounds := (disp_col_u <= MAX_COL_U10) and (disp_row_u <= MAX_ROW_U10);
+      mode_changed := (display_active /= display_active_prev);
 
       -- Swap only at frame boundary after a complete back-buffer render.
       if vert_sync = '1' and vsync_prev = '0' then
@@ -156,56 +159,62 @@ begin
       sram_we_n_r <= '1';
       sram_oe_n_r <= '1';
 
-      -- Complete prior read (one-cycle latency).
-      if read_pending = '1' then
-        pix565 := sram_dq;
-        disp_r <= std_logic_vector(pix565(15 downto 11) & pix565(15 downto 13));
-        disp_g <= std_logic_vector(pix565(10 downto 5) & pix565(10 downto 9));
-        disp_b <= std_logic_vector(pix565(4 downto 0) & pix565(4 downto 2));
+      if mode_changed then
+        -- Conservative read/write turnaround at active/blank boundaries.
         read_pending <= '0';
-      end if;
-
-      -- Active video: read-only to maximize display stability.
-      if display_active = '1' then
-        -- Suppress one-cycle read-latency seam at each line start (x=0),
-        -- which would otherwise show the previous line's tail pixel.
-        if disp_col_u = 0 then
-          disp_r <= (others => '0');
-          disp_g <= (others => '0');
-          disp_b <= (others => '0');
+      else
+      -- Complete prior read (one-cycle latency).
+        if read_pending = '1' then
+          pix565 := sram_dq;
+          disp_r <= std_logic_vector(pix565(15 downto 11) & pix565(15 downto 13));
+          disp_g <= std_logic_vector(pix565(10 downto 5) & pix565(10 downto 9));
+          disp_b <= std_logic_vector(pix565(4 downto 0) & pix565(4 downto 2));
+          read_pending <= '0';
         end if;
 
-        if front_valid = '1' and in_bounds then
-          read_addr := front_base + pixel_offset(disp_col_u, disp_row_u);
-          sram_addr_r <= read_addr;
-          sram_oe_n_r <= '0';
-          read_pending <= '1';
-        else
-          disp_r <= (others => '0');
-          disp_g <= (others => '0');
-          disp_b <= (others => '0');
-        end if;
-
-      -- Blanking: write-only to keep read/write turnaround conservative.
-      elsif render_done = '0' then
-        write_addr := back_base + render_offset(render_x, render_y);
-        sram_addr_r <= write_addr;
-        sram_dq_out <= rgb888_to_565(render_red, render_green, render_blue);
-        sram_dq_oe  <= '1';
-        sram_we_n_r <= '0';
-
-        if render_x = WIDTH - 1 then
-          render_x <= 0;
-          if render_y = HEIGHT - 1 then
-            render_y <= 0;
-            render_done <= '1';
-          else
-            render_y <= render_y + 1;
+        -- Active video: read-only to maximize display stability.
+        if display_active = '1' then
+          -- Suppress one-cycle read-latency seam at each line start (x=0),
+          -- which would otherwise show the previous line's tail pixel.
+          if disp_col_u = 0 then
+            disp_r <= (others => '0');
+            disp_g <= (others => '0');
+            disp_b <= (others => '0');
           end if;
-        else
-          render_x <= render_x + 1;
+
+          if front_valid = '1' and in_bounds then
+            read_addr := front_base + pixel_offset(disp_col_u, disp_row_u);
+            sram_addr_r <= read_addr;
+            sram_oe_n_r <= '0';
+            read_pending <= '1';
+          else
+            disp_r <= (others => '0');
+            disp_g <= (others => '0');
+            disp_b <= (others => '0');
+          end if;
+
+        -- Blanking: write-only to keep read/write turnaround conservative.
+        elsif render_done = '0' then
+          write_addr := back_base + render_offset(render_x, render_y);
+          sram_addr_r <= write_addr;
+          sram_dq_out <= rgb888_to_565(render_red, render_green, render_blue);
+          sram_dq_oe  <= '1';
+          sram_we_n_r <= '0';
+
+          if render_x = WIDTH - 1 then
+            render_x <= 0;
+            if render_y = HEIGHT - 1 then
+              render_y <= 0;
+              render_done <= '1';
+            else
+              render_y <= render_y + 1;
+            end if;
+          else
+            render_x <= render_x + 1;
+          end if;
         end if;
       end if;
+      display_active_prev <= display_active;
     end if;
   end process;
 

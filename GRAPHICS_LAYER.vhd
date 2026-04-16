@@ -308,12 +308,16 @@ begin
 
         if SPHERE_WIREFRAME_MODE then
           hit := render_wireframe_sphere_pixel(x, y, scaled_sphere, 2);
+          if ((hit.r /= x"00") or (hit.g /= x"00") or (hit.b /= x"00")) then
+            color := hit;
+          end if;
         else
           hit := render_lit_sphere_pixel(x, y, scaled_sphere, SCENE_LIGHT);
-        end if;
-
-        if ((hit.r /= x"00") or (hit.g /= x"00") or (hit.b /= x"00")) then
-          color := hit;
+          -- For filled spheres, black is a valid lit color and must still
+          -- occlude objects behind it.
+          if sphere_contains_pixel(x, y, scaled_sphere) then
+            color := hit;
+          end if;
         end if;
 
       end loop;
