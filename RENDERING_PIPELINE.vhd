@@ -27,6 +27,7 @@ PACKAGE RENDERING_PIPELINE IS
     FUNCTION clamp_u8(v : INTEGER) RETURN INTEGER;
     FUNCTION inv_scale_delta_q8(delta_px, scale_q8 : INTEGER) RETURN INTEGER;
     FUNCTION scale_color(base_color : color_t; shade_q8 : INTEGER) RETURN color_t;
+    FUNCTION shade_from_dot_q8(dot_q8 : INTEGER; light : light_t) RETURN INTEGER;
 
     FUNCTION render_lit_cube_pixel(
         x, y : INTEGER;
@@ -83,6 +84,13 @@ PACKAGE BODY RENDERING_PIPELINE IS
             g => to_slv8((base_g * shade + 128) / 256),
             b => to_slv8((base_b * shade + 128) / 256)
         );
+    END FUNCTION;
+
+    FUNCTION shade_from_dot_q8(dot_q8 : INTEGER; light : light_t) RETURN INTEGER IS
+        VARIABLE dot_clamped : INTEGER;
+    BEGIN
+        dot_clamped := clamp_u8(dot_q8);
+        RETURN clamp_u8(light.ambient_q8 + ((dot_clamped * light.diffuse_q8 + 128) / 256));
     END FUNCTION;
 
     FUNCTION clamp_scale_q8(scale_q8 : INTEGER) RETURN INTEGER IS
@@ -212,24 +220,15 @@ PACKAGE BODY RENDERING_PIPELINE IS
 
     FUNCTION face_shade_q8(face_id : INTEGER; light : light_t) RETURN INTEGER IS
         VARIABLE dot_q8 : INTEGER;
-        VARIABLE shade_q8 : INTEGER;
     BEGIN
         CASE face_id IS
             WHEN 1 => dot_q8 := light.z_q8;
             WHEN 2 => dot_q8 := light.x_q8;
             WHEN 3 => dot_q8 := light.y_q8;
-            WHEN 4 => dot_q8 := -light.z_q8;
-            WHEN 5 => dot_q8 := -light.x_q8;
-            WHEN 6 => dot_q8 := -light.y_q8;
             WHEN OTHERS => dot_q8 := 0;
         END CASE;
 
-        IF dot_q8 < 0 THEN
-            dot_q8 := 0;
-        END IF;
-
-        shade_q8 := light.ambient_q8 + ((dot_q8 * light.diffuse_q8) / 255);
-        RETURN clamp_u8(shade_q8);
+        RETURN shade_from_dot_q8(dot_q8, light);
     END FUNCTION;
 
     FUNCTION render_lit_cube_pixel(

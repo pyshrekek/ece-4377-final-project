@@ -64,7 +64,6 @@ package body sphere_rendering is
     variable z_approx  : integer;
     variable dot_num   : integer;
     variable dot_q8    : integer;
-    variable diff_term : integer;
     variable shade     : integer;
   begin
     if sphere.radius <= 0 then
@@ -104,17 +103,10 @@ package body sphere_rendering is
       else
         dot_q8 := dot_num / 256;
       end if;
-
-      if dot_q8 < 0 then
-        dot_q8 := 0;
-      elsif dot_q8 > 255 then
-        dot_q8 := 255;
-      end if;
     end if;
 
-    diff_term := (dot_q8 * light.diffuse_q8 + 128) / 256;
-    shade := light.ambient_q8 + diff_term;
-    return scale_color(sphere.color, clamp_u8(shade));
+    shade := shade_from_dot_q8(dot_q8, light);
+    return scale_color(sphere.color, shade);
   end function;
 
   function render_wireframe_sphere_pixel(
