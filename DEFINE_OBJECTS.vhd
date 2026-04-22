@@ -17,7 +17,7 @@
 --   ambient_q8           : ambient term  (0-255)
 --   diffuse_q8           : diffuse scale (0-255)
 --
--- To add a cube: append a SCENE entry.
+-- To add a cube: append a SCENE_CUBES entry.
 -- To hide one:   set side_length => 0  (zero-size = invisible).
 -- ============================================================
 
@@ -52,7 +52,7 @@ package define_objects is
 
   -- ── Cubes ────────────────────────────────────────────────
   -- Simple debug cube.
-  constant scene : cube_scene_t :=
+  constant scene_cubes : cube_scene_t :=
   (
     0 => (
       center_x => 240, center_y => 240, side_length => 96,

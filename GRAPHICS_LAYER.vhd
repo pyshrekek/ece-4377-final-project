@@ -54,7 +54,7 @@ architecture behavioral of graphics_layer is
 
   signal frame_show_sphere        : std_logic := '1';
   signal frame_show_cube          : std_logic := '1';
-  signal frame_cubes              : cube_scene_t(SCENE'range) := SCENE;
+  signal frame_cubes              : cube_scene_t(SCENE_CUBES'range) := SCENE_CUBES;
   signal frame_spheres            : sphere_scene_t(SCENE_SPHERES'range) := SCENE_SPHERES;
 
   signal vert_sync_s1       : std_logic := '0';
@@ -328,8 +328,8 @@ begin
         scale_num_frame := zoom_scale_num(zoom_level);
         scale_den_frame := zoom_scale_den(zoom_level);
 
-        for i in SCENE'range loop
-          transformed_cube := transform_cube(SCENE(i), ROT_NONE_MAT, scale_num_frame, scale_den_frame, x_offset, y_offset);
+        for i in SCENE_CUBES'range loop
+          transformed_cube := transform_cube(SCENE_CUBES(i), ROT_NONE_MAT, scale_num_frame, scale_den_frame, x_offset, y_offset);
           if cube_cycle_frame = '1' then
             transformed_cube.color := rgb_cycle_color(next_cube_phase);
           end if;
